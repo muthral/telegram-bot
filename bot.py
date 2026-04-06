@@ -38,10 +38,10 @@ async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📋 daftar command bot kutil ajaib:\n\n"
         "/apa [pertanyaan]\n"
         "/hitung [pertanyaan]\n"
-        "/istirahat\n"
-        "/bangun\n"
-        "/tagrandom\n"
-        "/tebakangka\n"
+        "/istirahat - non aktifkan bot\n"
+        "/bangun - aktifkan bot kembali\n"
+        "/tagrandom - tag satu member secara random\n"
+        "/tebakangka - permainan tebak angka!\n"
         "/stoptebak\n"
         "/help"
     )
@@ -157,7 +157,6 @@ async def tebakangka(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "permainan tebak angka dimulai.\n"
         "masukkan satu angka antara 0 sampai 100!\n"
-        "(reply pesan ini)"
     )
 
 async def stoptebak(update: Update, context: ContextTypes.DEFAULT_TYPE):
