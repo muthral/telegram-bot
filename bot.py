@@ -42,7 +42,7 @@ jawaban = [
     "ewh",
     "serius nanya ini?",
     "iya dong",
-    "gak dong, pake nanya",
+    "gak lah, pake nanya",
     "nyawit ni orang",
     "stoooop",
     "kamu nanya?",
@@ -68,14 +68,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pesan = (
         "📋 daftar command bot kutil ajaib:\n\n"
-        "/apa [pertanyaan] — tanya pertanyaan, bot akan jawab secara random\n"
-        "contoh: /apa aku akan lulus ujian?\n\n"
-        "/hitung [pertanyaan] — hitung sesuatu, bot kasih angka 0–100\n"
-        "contoh: /hitung berapa persen kecocokkan kita?\n\n"
-        "/istirahat — bot istirahat sementara (tidak akan jawab /apa)\n\n"
-        "/bangun — bangunin bot lagi setelah istirahat\n\n"
-        "/tagrandom — tag 1 member random yang pernah aktif di grup\n\n"
-        "/help — tampilkan daftar command ini"
+        "/apa [pertanyaan]\n"
+        "/hitung [pertanyaan]\n"
+        "/istirahat\n"
+        "/bangun\n"
+        "/tagrandom\n"
+        "/tebakangka\n"
+        "/stoptebak\n"
+        "/help"
     )
     await update.message.reply_text(pesan)
 
@@ -94,7 +94,7 @@ async def tagrandom(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
     members = chat_members.get(chat_id, {})
     if not members:
-        await update.message.reply_text("belum ada member yang terdeteksi, tunggu dulu ada yang chat di sini 😅")
+        await update.message.reply_text("belum ada member yang terdeteksi 😅")
         return
     user = random.choice(list(members.values()))
     if user.username:
@@ -126,7 +126,7 @@ async def bangun(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def istirahat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
     chat_aktif[chat_id] = False
-    await update.message.reply_text("oke aku istirahat dulu, aktifin lagi pake /bangun 😴")
+    await update.message.reply_text("oke aku istirahat dulu 😴")
 
 async def apa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
@@ -163,11 +163,109 @@ async def apa(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(hasil)
 
+# =========================
+# GAME TEBAK ANGKA
+# =========================
+
+async def tebakangka(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.message.chat_id
+    user_id = update.message.from_user.id
+
+    key = (chat_id, user_id)
+
+    if key in game_sessions:
+        await update.message.reply_text("kamu masih punya game yang belum selesai")
+        return
+
+    angka = random.randint(0, 100)
+
+    game_sessions[key] = {
+        "angka": angka,
+        "tebakan": 0
+    }
+
+    await update.message.reply_text(
+        "permainan tebak angka dimulai.\n"
+        "masukkan satu angka antara 0 sampai 100!\n"
+        "(reply pesan ini)"
+    )
+
+async def stoptebak(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.message.chat_id
+    user_id = update.message.from_user.id
+    key = (chat_id, user_id)
+
+    if key not in game_sessions:
+        await update.message.reply_text("kamu tidak sedang bermain")
+        return
+
+    del game_sessions[key]
+    await update.message.reply_text("game dihentikan")
+
+async def proses_tebakan(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.from_user:
+        return
+
+    chat_id = update.message.chat_id
+    user_id = update.message.from_user.id
+    key = (chat_id, user_id)
+
+    if key not in game_sessions:
+        return
+
+    text = update.message.text.strip()
+
+    if not text.isdigit():
+        return
+
+    tebakan = int(text)
+
+    if tebakan < 0 or tebakan > 100:
+        return
+
+    session = game_sessions[key]
+    angka = session["angka"]
+
+    session["tebakan"] += 1
+    jumlah = session["tebakan"]
+
+    if tebakan > angka:
+        await update.message.reply_text("angkamu terlalu besar")
+        return
+
+    if tebakan < angka:
+        await update.message.reply_text("angkamu terlalu kecil")
+        return
+
+    if jumlah == 1:
+        pesan = "🤯🤯🤯OMAIGOT?! sekali tebak langsung bener, fiks cenanyang!"
+    elif 2 <= jumlah <= 3:
+        pesan = "KEREN SEKALI, KAMU LEGEND!"
+    elif 4 <= jumlah <= 5:
+        pesan = "woww keren 😎"
+    elif 6 <= jumlah <= 7:
+        pesan = "lumayan... coba lagi?"
+    elif 8 <= jumlah <= 10:
+        pesan = "aowkwkwk lama bgt nebaknya"
+    elif 11 <= jumlah <= 15:
+        pesan = "bisa main ga sih"
+    else:
+        pesan = "nyawit ni orang"
+
+    await update.message.reply_text(
+        f"kamu berhasil menebaknya dalam {jumlah} kali tebakan.\n\n{pesan}"
+    )
+
+    del game_sessions[key]
+
+# =========================
+
 if __name__ == "__main__":
     if not TOKEN:
         raise ValueError("TELEGRAM_BOT_TOKEN environment variable is not set!")
 
     app = ApplicationBuilder().token(TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help))
     app.add_handler(CommandHandler("bangun", bangun))
@@ -175,10 +273,11 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("apa", apa))
     app.add_handler(CommandHandler("hitung", hitung))
     app.add_handler(CommandHandler("tagrandom", tagrandom))
+    app.add_handler(CommandHandler("tebakangka", tebakangka))
+    app.add_handler(CommandHandler("stoptebak", stoptebak))
+
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_member))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, proses_tebakan))
 
     print("Bot is running...")
     app.run_polling()
-
-
-
