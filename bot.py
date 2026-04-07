@@ -277,10 +277,9 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     players = spy_sessions[chat_id]["players"]
 
-    text = "🕵️ GAME SPY\n\nketik /join untuk ikut\n\n👥 pemain:\n"
+    text = "🕵️ GAME SPY DIMULAI\n\nketik /join untuk ikut\nminimal 3 pemain\n\nhost ketik /startspy untuk mulai\n\n👥 pemain:\n"
 
     for u in players.values():
-
         if u.username:
             text += f"@{u.username}\n"
         else:
