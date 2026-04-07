@@ -78,7 +78,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-         "📋 daftar command bot kutil ajaib\n\n"
+         "📋 daftar command bot kutil ajaib\n"
         "/apa [pertanyaan]\n"
         "/hitung [pertanyaan]\n"
         "/tagrandom - pilih satu member secara random\n"
@@ -368,10 +368,12 @@ async def spy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_sticker(update, STICKER_SPY, context, is_reply=True)
 
     msg = await update.message.reply_text(
-        "🕵️ GAME SPY DIMULAI\n\n"
-        "ketik /join untuk ikut\n"
+        "🕵️ GAME SPY DIMULAI\n"
+        "semua pemain akan mendapat pesan rahasia, hanya spy yang tidak mendapatkannya. 
+        Bisakah kalian menebak siapa SPY nya?\n\n"
+        "klik /join untuk ikut\n"
         "minimal 3 pemain\n\n"
-        "host ketik /startspy untuk mulai\n\n"
+        "klik /startspy untuk mulai\n\n"
         "👥 pemain:\n"
         "-"
     )
@@ -401,7 +403,7 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(f"{user.first_name} telah mengikuti permainan!")
 
-    text = "🕵️ GAME SPY DIMULAI\n\nketik /join untuk ikut\nminimal 3 pemain\n\nhost ketik /startspy untuk mulai\n\n👥 pemain:\n"
+    text = "🕵️ GAME SPY DIMULAI\n\nklik /join untuk ikut\nminimal 3 pemain\n\nhost klik /startspy untuk mulai\n\n👥 pemain:\n"
 
     for u in players.values():
         if u.username:
@@ -561,10 +563,10 @@ async def startspy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_sticker(update, STICKER_DISKUSI, context, is_reply=True)
 
     await update.message.reply_text(
-        "📨 kata sudah dikirim ke DM\n\n"
+        "📨 kata sudah dikirim ke DM masing-masing\n\n"
         "💬 diskusi dimulai!\n"
         "⏱ waktu diskusi 2 menit\n\n"
-        "cari siapa SPY nya"
+        "waktunya saling fitnah untuk menebak siapa SPY nya!"
     )
 
     await asyncio.sleep(60)
