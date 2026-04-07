@@ -273,9 +273,20 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if chat_id not in spy_sessions:
         return
 
+    # Cek apakah user sudah join sebelumnya
+    if user.id in spy_sessions[chat_id]["players"]:
+        await update.message.reply_text(f"{user.first_name} sudah bergabung sebelumnya!")
+        return
+
     spy_sessions[chat_id]["players"][user.id] = user
 
     players = spy_sessions[chat_id]["players"]
+
+    # Kirim notifikasi ke group
+    if user.username:
+        await update.message.reply_text(f"@{user.username} telah mengikuti permainan!")
+    else:
+        await update.message.reply_text(f"{user.first_name} telah mengikuti permainan!")
 
     text = "🕵️ GAME SPY DIMULAI\n\nketik /join untuk ikut\nminimal 3 pemain\n\nhost ketik /startspy untuk mulai\n\n👥 pemain:\n"
 
