@@ -2,6 +2,8 @@ import os
 import random
 import logging
 import asyncio
+import time
+from collections import deque
 from telegram import Update, InputFile
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
@@ -12,10 +14,24 @@ logging.basicConfig(
 
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 
+# =====================
+# STICKER FILE IDs
+# Ganti nilai di bawah ini dengan file_id sticker kamu
+# Cara dapet file_id: kirim stickernya ke @RawDataBot
+# =====================
+STICKER_SPY      = "CAACAgUAAxkBAAFGoEtp1J78ieeRSCFdt3ffBbaK5F3hWgAC8h4AAgFzoFaHuFm9FmtkxTsE"
+STICKER_DISKUSI  = "CAACAgUAAxkBAAFGoFFp1J-MAghOVIqTYYwRpixqyE9rRwAC6h0AApsHqFaDtRa9ufQrxzsE"
+STICKER_VOTE     = "CAACAgUAAxkBAAFGoFNp1J-1aqIVxA_jOG4cnLM5SF07FAAC5R0AApsHqFZswZfoLh6n_DsE"
+
 chat_aktif = {}
 chat_members = {}
+# recent_chatters: {chat_id: deque of (timestamp, user)}
+# menyimpan 200 pesan terakhir per grup untuk keperluan /tag7
+recent_chatters = {}
 game_sessions = {}
 spy_sessions = {}
+
+MAX_RECENT = 200  # jumlah pesan terakhir yang dilacak
 
 spy_words = [
 "roti","mie","bubur","rendang","pempek","cimol","sate","ayam",
@@ -25,8 +41,7 @@ spy_words = [
 "kerudung","sarung","tv","parfum","charger","tetikus","kabel",
 "plastik","tas","keyboard","uang","bank","hutang","ide","buku",
 "novel","kamus","kertas","berlian","cincin","emas","kopi","teh",
-"matcha","vanila","cireng","permen","jelly","coklat","shampoo","sabun","air"
-"cincau","nasi","ikan","kambing","sapi","babi","keju","kebab"
+"matcha","vanila","cireng","permen","jelly","coklat"
 ]
 
 jawaban = [
@@ -36,10 +51,21 @@ jawaban = [
 "omaigot","😱","i hate u","stop asking","bntar, cape.. satu2 guys",
 "iya (btw i love siyc)","ewh","serius nanya ini?","iya dong",
 "gak lah, pake nanya","nyawit ni orang","stoooop","kamu nanya?",
-"km nanyea?","aah ah ahhh..","🤤🤤🤤","hehe, ga","*ngangguk","jangan sekarang","malas",
-"tidak","ya","totally","bisa iya bisa ngga","hmmm let me think...","*bot sedang shalat, coba lagi di lain waktu"
-    
+"km nanyea?","aah ah ahhh..","🤤🤤🤤","hehe, ga","*ngangguk","jangan sekarang",
 ]
+
+# =====================
+# HELPER: kirim sticker (fallback diam-diam kalau gagal)
+# =====================
+
+async def send_sticker(chat_id_or_update, sticker_id, context, is_reply=False):
+    try:
+        if is_reply and hasattr(chat_id_or_update, 'message'):
+            await chat_id_or_update.message.reply_sticker(sticker_id)
+        else:
+            await context.bot.send_sticker(chat_id=chat_id_or_update, sticker=sticker_id)
+    except:
+        pass
 
 # =====================
 # BASIC COMMAND
@@ -55,12 +81,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "📋 daftar command bot kutil ajaib\n\n"
-        "/apa [pertanyaan]\n"
-        "/hitung [pertanyaan]\n"
-        "/tagrandom - pilih satu member secara random\n\n"
-         "🎮 TEBAK ANGKA\n"
-        "/tebakangka\n"
-        "/stoptebak\n\n"
+        "/apa\n"
+        "/hitung\n"
+        "/tagrandom\n"
+        "/tag7 - tag 7 orang random.\n"
+        "/tebakangka\n\n"
         "🎮 GAME SPY\n"
         "/spy\n"
         "/join\n"
@@ -85,10 +110,15 @@ async def track_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_id = update.message.chat_id
 
+    # Simpan ke chat_members (semua yang pernah chat)
     if chat_id not in chat_members:
         chat_members[chat_id] = {}
-
     chat_members[chat_id][user.id] = user
+
+    # Simpan ke recent_chatters (untuk /tag7)
+    if chat_id not in recent_chatters:
+        recent_chatters[chat_id] = deque(maxlen=MAX_RECENT)
+    recent_chatters[chat_id].append((time.time(), user))
 
     # Proses tebakan juga di sini
     await proses_tebakan_internal(update, context)
@@ -102,19 +132,11 @@ async def tagrandom(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
     members = chat_members.get(chat_id, {})
 
-    # Kecualikan diri sendiri (user yang mengetik command)
-    caller_id = update.message.from_user.id
-    kandidat = {uid: u for uid, u in members.items() if uid != caller_id}
+    if not members:
+        await update.message.reply_text("belum ada member terdeteksi. chat dulu biar kedeteksi!")
+        return
 
-    if not kandidat:
-        # Kalau hanya ada 1 orang (si pemanggil), pilih dia saja
-        if members:
-            kandidat = members
-        else:
-            await update.message.reply_text("belum ada member terdeteksi. chat dulu biar kedeteksi!")
-            return
-
-    user = random.choice(list(kandidat.values()))
+    user = random.choice(list(members.values()))
 
     if user.username:
         mention = f"@{user.username}"
@@ -123,6 +145,63 @@ async def tagrandom(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         f"yang terpilih: {mention} 🎯",
+        parse_mode="HTML"
+    )
+
+# =====================
+# TAG 7
+# =====================
+
+async def tag7(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    chat_id = update.message.chat_id
+    recent = recent_chatters.get(chat_id)
+
+    if not recent:
+        await update.message.reply_text("belum ada yang chat. chat dulu biar kedeteksi!")
+        return
+
+    # Ambil user unik dari 200 pesan terakhir (atau 3 jam terakhir, mana yg lebih banyak)
+    batas_waktu = time.time() - (3 * 60 * 60)  # 3 jam terakhir
+
+    seen_ids = set()
+    kandidat = []
+
+    # Iterasi dari yang paling baru
+    for ts, user in reversed(list(recent)):
+        if user.id in seen_ids:
+            continue
+        seen_ids.add(user.id)
+        kandidat.append(user)
+
+    # Filter berdasarkan waktu jika kandidat dari 200 pesan kurang dari 7
+    # kalau ada cukup orang dari 200 pesan terakhir, pakai semua
+    # kalau tidak, ambil dari siapa saja yang pernah chat
+    if len(kandidat) < 7:
+        # Tambah dari chat_members yang belum ada
+        semua = chat_members.get(chat_id, {})
+        for uid, user in semua.items():
+            if uid not in seen_ids:
+                seen_ids.add(uid)
+                kandidat.append(user)
+
+    if len(kandidat) == 0:
+        await update.message.reply_text("tidak ada member terdeteksi")
+        return
+
+    jumlah_tag = min(7, len(kandidat))
+    terpilih = random.sample(kandidat, jumlah_tag)
+
+    mentions = []
+    for user in terpilih:
+        if user.username:
+            mentions.append(f"@{user.username}")
+        else:
+            mentions.append(f'<a href="tg://user?id={user.id}">{user.first_name}</a>')
+
+    hasil = " ".join(mentions)
+    await update.message.reply_text(
+        f"🎯 {hasil}",
         parse_mode="HTML"
     )
 
@@ -286,19 +365,13 @@ async def spy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "discussion_task": None
     }
 
-    # Send image first
-    try:
-        with open('images/waktunya_spy.jpg', 'rb') as photo:
-            await update.message.reply_photo(photo=InputFile(photo))
-    except:
-        pass
+    await send_sticker(update, STICKER_SPY, context, is_reply=True)
 
-    # Then send text
     msg = await update.message.reply_text(
         "🕵️ GAME SPY DIMULAI\n\n"
-        "klik /join untuk ikut\n"
+        "ketik /join untuk ikut\n"
         "minimal 3 pemain\n\n"
-        "host klik /startspy untuk mulai\n\n"
+        "host ketik /startspy untuk mulai\n\n"
         "👥 pemain:\n"
         "-"
     )
@@ -315,7 +388,6 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if chat_id not in spy_sessions:
         return
 
-    # Cek apakah user sudah join sebelumnya
     if user.id in spy_sessions[chat_id]["players"]:
         await update.message.reply_text(f"{user.first_name} sudah bergabung sebelumnya!")
         return
@@ -324,13 +396,12 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     players = spy_sessions[chat_id]["players"]
 
-    # Kirim notifikasi ke group
     if user.username:
         await update.message.reply_text(f"@{user.username} telah mengikuti permainan!")
     else:
         await update.message.reply_text(f"{user.first_name} telah mengikuti permainan!")
 
-    text = "🕵️ GAME SPY DIMULAI\n\nklik /join untuk ikut\nminimal 3 pemain\n\nhost klik /startspy untuk mulai\n\n👥 pemain:\n"
+    text = "🕵️ GAME SPY DIMULAI\n\nketik /join untuk ikut\nminimal 3 pemain\n\nhost ketik /startspy untuk mulai\n\n👥 pemain:\n"
 
     for u in players.values():
         if u.username:
@@ -384,14 +455,8 @@ async def start_discussion(chat_id, context):
     if spy_sessions[chat_id].get("vote_started", False):
         return
 
-    # Send image first
-    try:
-        with open('images/vote.jpg', 'rb') as photo:
-            await context.bot.send_photo(chat_id=chat_id, photo=InputFile(photo))
-    except:
-        pass
+    await send_sticker(chat_id, STICKER_VOTE, context)
 
-    # Then send text
     await context.bot.send_message(
         chat_id,
         "🗳 diskusi selesai\n\n"
@@ -459,7 +524,6 @@ async def startspy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if chat_id not in spy_sessions:
         return
 
-    # Jika game sudah dimulai, kasih tahu user
     if spy_sessions[chat_id].get("started", False):
         await update.message.reply_text("⚠️ game spy sudah dimulai sebelumnya!")
         return
@@ -494,14 +558,8 @@ async def startspy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
-    # Send discussion image first
-    try:
-        with open('images/waktunya_diskusi.jpg', 'rb') as photo:
-            await update.message.reply_photo(photo=InputFile(photo))
-    except:
-        pass
+    await send_sticker(update, STICKER_DISKUSI, context, is_reply=True)
 
-    # Then send text
     await update.message.reply_text(
         "📨 kata sudah dikirim ke DM\n\n"
         "💬 diskusi dimulai!\n"
@@ -516,7 +574,6 @@ async def startspy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "⏰ tinggal 1 menit lagi!"
     )
 
-    # Start discussion timer
     asyncio.create_task(start_discussion(chat_id, context))
 
 # =====================
@@ -586,14 +643,8 @@ async def skip(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     spy_sessions[chat_id]["vote_started"] = True
 
-    # Send image first
-    try:
-        with open('images/vote.jpg', 'rb') as photo:
-            await update.message.reply_photo(photo=InputFile(photo))
-    except:
-        pass
+    await send_sticker(update, STICKER_VOTE, context, is_reply=True)
 
-    # Then send text
     await update.message.reply_text(
         "🗳 vote dimulai lebih awal!\n\n"
         "gunakan /vote @username\n\n"
@@ -630,6 +681,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("apa", apa))
     app.add_handler(CommandHandler("hitung", hitung))
     app.add_handler(CommandHandler("tagrandom", tagrandom))
+    app.add_handler(CommandHandler("tag7", tag7))
 
     app.add_handler(CommandHandler("tebakangka", tebakangka))
     app.add_handler(CommandHandler("stoptebak", stoptebak))
