@@ -23,13 +23,15 @@ STICKER_VOTE     = "CAACAgUAAxkBAAFGoFNp1J-1aqIVxA_jOG4cnLM5SF07FAAC5R0AApsHqFZs
 
 chat_aktif = {}
 chat_members = {}
-# recent_chatters: {chat_id: deque of (timestamp, user)}
-# menyimpan 300 pesan terakhir per grup untuk keperluan /tag7
 recent_chatters = {}
 game_sessions = {}
 spy_sessions = {}
 
-MAX_RECENT = 300  # jumlah pesan terakhir yang dilacak
+# spy_guess_pending: {spy_user_id: {"chat_id": ..., "word": ..., "spy_name": ...}}
+# diisi saat spy tertangkap dan menunggu tebakan kata
+spy_guess_pending = {}
+
+MAX_RECENT = 300
 
 spy_words = [
 "roti","mie","bubur","rendang","pempek","cimol","sate","ayam",
@@ -53,7 +55,7 @@ jawaban = [
 ]
 
 # =====================
-# HELPER: kirim sticker (fallback diam-diam kalau gagal)
+# HELPER: kirim sticker
 # =====================
 
 async def send_sticker(chat_id_or_update, sticker_id, context, is_reply=False):
@@ -78,12 +80,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-         "📋 daftar command bot kutil ajaib\n"
+        "📋 daftar command bot kutil ajaib\n"
         "/apa [pertanyaan]\n"
         "/hitung [pertanyaan]\n"
         "/tagrandom - pilih satu member secara random\n"
         "/tag7 - tag 7 member secara random\n\n"
-         "🎮 TEBAK ANGKA\n"
+        "🎮 TEBAK ANGKA\n"
         "/tebakangka\n"
         "/stoptebak\n\n"
         "🎮 GAME SPY\n"
@@ -109,8 +111,14 @@ async def track_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     chat_id = update.message.chat_id
+    chat_type = update.message.chat.type
 
-    # Simpan ke chat_members (semua yang pernah chat)
+    # Jika pesan dari private chat, cek spy guess dulu
+    if chat_type == "private":
+        await proses_spy_guess(update, context)
+        return
+
+    # Simpan ke chat_members (semua yang pernah chat di grup)
     if chat_id not in chat_members:
         chat_members[chat_id] = {}
     chat_members[chat_id][user.id] = user
@@ -161,24 +169,16 @@ async def tag7(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("belum cukup member terdeteksi!")
         return
 
-    # Ambil user unik dari 200 pesan terakhir (atau 3 jam terakhir, mana yg lebih banyak)
-    batas_waktu = time.time() - (3 * 60 * 60)  # 3 jam terakhir
-
     seen_ids = set()
     kandidat = []
 
-    # Iterasi dari yang paling baru
     for ts, user in reversed(list(recent)):
         if user.id in seen_ids:
             continue
         seen_ids.add(user.id)
         kandidat.append(user)
 
-    # Filter berdasarkan waktu jika kandidat dari 300 pesan kurang dari 7
-    # kalau ada cukup orang dari 200 pesan terakhir, pakai semua
-    # kalau tidak, ambil dari siapa saja yang pernah chat
     if len(kandidat) < 7:
-        # Tambah dari chat_members yang belum ada
         semua = chat_members.get(chat_id, {})
         for uid, user in semua.items():
             if uid not in seen_ids:
@@ -216,7 +216,6 @@ async def apa(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     pertanyaan = " ".join(context.args).lower()
 
-    # Cek kata pertama apakah "kabar"
     if context.args[0].lower() == "kabar":
         await update.message.reply_text("baik")
         return
@@ -250,7 +249,6 @@ async def hitung(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pertanyaan = " ".join(context.args).lower()
     angka = random.randint(0, 100)
 
-    # Jika ada kata "persen", tampilkan dengan format %
     if "persen" in pertanyaan:
         await update.message.reply_text(f"{angka}%")
     else:
@@ -369,8 +367,8 @@ async def spy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     msg = await update.message.reply_text(
         "🕵️ GAME SPY DIMULAI\n"
-        "semua pemain akan mendapat pesan rahasia, hanya spy yang tidak mendapatkannya. 
-        Bisakah kalian menebak siapa SPY nya?\n\n"
+        "semua pemain akan mendapat pesan rahasia, hanya spy yang tidak mendapatkannya. "
+        "Bisakah kalian menebak siapa SPY nya?\n\n"
         "klik /join untuk ikut\n"
         "minimal 3 pemain\n\n"
         "klik /startspy untuk mulai\n\n"
@@ -473,6 +471,72 @@ async def start_discussion(chat_id, context):
 
     await end_vote(chat_id, context)
 
+# =====================
+# SPY GUESS MECHANIC
+# =====================
+
+async def spy_guess_timeout(spy_id, chat_id, context):
+    await asyncio.sleep(30)
+
+    if spy_id not in spy_guess_pending:
+        return
+
+    data = spy_guess_pending.pop(spy_id)
+    spy_name = data["spy_name"]
+    word = data["word"]
+
+    try:
+        await context.bot.send_message(
+            spy_id,
+            f"⏰ waktu habis!\n\nkata rahasianya adalah: {word}\n\nwarga menang!"
+        )
+    except:
+        pass
+
+    await context.bot.send_message(
+        chat_id,
+        f"⏰ spy kehabisan waktu untuk menebak!\n\n"
+        f"🎉 warga menang!\n\n"
+        f"spy: {spy_name}\n"
+        f"kata: {word}"
+    )
+
+async def proses_spy_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+
+    if user_id not in spy_guess_pending:
+        return
+
+    data = spy_guess_pending.pop(user_id)
+    word = data["word"]
+    chat_id = data["chat_id"]
+    spy_name = data["spy_name"]
+
+    tebakan = update.message.text.strip().lower()
+
+    if tebakan == word.lower():
+        await update.message.reply_text(
+            f"✅ BENAR! kata rahasianya memang '{word}'\n\n"
+            f"kamu menang sebagai SPY! 😈"
+        )
+        await context.bot.send_message(
+            chat_id,
+            f"😈 SPY MENANG!\n\n"
+            f"{spy_name} berhasil menebak kata rahasianya!\n\n"
+            f"kata: {word}"
+        )
+    else:
+        await update.message.reply_text(
+            f"❌ salah!\n\nkata rahasianya adalah: {word}\n\nwarga menang!"
+        )
+        await context.bot.send_message(
+            chat_id,
+            f"🎉 spy gagal menebak!\n\n"
+            f"warga menang!\n\n"
+            f"spy: {spy_name}\n"
+            f"kata: {word}"
+        )
+
 async def end_vote(chat_id, context):
     if chat_id not in spy_sessions:
         return
@@ -482,42 +546,69 @@ async def end_vote(chat_id, context):
     spy_id = spy_sessions[chat_id]["spy"]
     word = spy_sessions[chat_id]["word"]
 
-    if not votes:
-        spy_user = players[spy_id]
-        name = spy_user.username if spy_user.username else spy_user.first_name
-
-        await context.bot.send_message(
-            chat_id,
-            f"😈 tidak ada vote\n\n"
-            f"SPY menang!\n\n"
-            f"spy adalah: {name}\n"
-            f"kata: {word}"
-        )
-
-        del spy_sessions[chat_id]
-        return
-
-    target = max(votes, key=votes.get)
     spy_user = players[spy_id]
     spy_name = spy_user.username if spy_user.username else spy_user.first_name
 
+    del spy_sessions[chat_id]
+
+    if not votes:
+        await context.bot.send_message(
+            chat_id,
+            f"😈 tidak ada yang vote!\n\n"
+            f"SPY menang!\n\n"
+            f"spy adalah: {spy_name}\n"
+            f"kata: {word}"
+        )
+        return
+
+    target = max(votes, key=votes.get)
+
     if int(target) == spy_id:
+        # Spy tertangkap — beri kesempatan tebak kata
         await context.bot.send_message(
             chat_id,
             f"🎉 SPY tertangkap!\n\n"
-            f"spy: {spy_name}\n"
-            f"kata: {word}\n\n"
-            f"warga menang!"
-        )
-    else:
-        await context.bot.send_message(
-            chat_id,
-            f"😈 spy lolos!\n\n"
-            f"spy: {spy_name}\n"
-            f"kata: {word}"
+            f"spy: {spy_name}\n\n"
+            f"tapi spy masih punya satu kesempatan!\n"
+            f"spy harus menebak kata rahasia lewat DM bot dalam 30 detik...\n\n"
+            f"⏳ menunggu tebakan spy..."
         )
 
-    del spy_sessions[chat_id]
+        try:
+            await context.bot.send_message(
+                spy_id,
+                f"kamu tertangkap sebagai SPY! 🕵️\n\n"
+                f"tapi kamu masih bisa menang!\n"
+                f"tebak kata rahasianya sekarang.\n\n"
+                f"⏱ kamu punya 30 detik!\n\n"
+                f"ketik tebakan kamu:"
+            )
+            spy_guess_pending[spy_id] = {
+                "chat_id": chat_id,
+                "word": word,
+                "spy_name": spy_name
+            }
+            asyncio.create_task(spy_guess_timeout(spy_id, chat_id, context))
+        except:
+            # Gagal DM spy (belum pernah chat dengan bot)
+            await context.bot.send_message(
+                chat_id,
+                f"⚠️ bot tidak bisa DM spy (spy belum pernah chat dengan bot)\n\n"
+                f"🎉 warga menang secara default!\n\n"
+                f"spy: {spy_name}\n"
+                f"kata: {word}"
+            )
+    else:
+        voted_user = players.get(int(target))
+        voted_name = voted_user.username if voted_user and voted_user.username else (voted_user.first_name if voted_user else "?")
+
+        await context.bot.send_message(
+            chat_id,
+            f"😈 spy lolos! yang di-vote bukan spy!\n\n"
+            f"yang divote: {voted_name}\n"
+            f"spy asli: {spy_name}\n"
+            f"kata: {word}"
+        )
 
 async def startspy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -696,7 +787,8 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("stopspy", stopspy))
     app.add_handler(CommandHandler("skip", skip))
 
-    # Satu handler untuk semua pesan teks (track member + proses tebakan digabung)
+    # Handler untuk semua pesan teks
+    # (track member di grup + spy guess di DM + proses tebakan)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_member))
 
     print("Bot is running...")
