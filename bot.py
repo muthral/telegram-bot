@@ -296,9 +296,9 @@ async def spy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Then send text
     msg = await update.message.reply_text(
         "🕵️ GAME SPY DIMULAI\n\n"
-        "ketik /join untuk ikut\n"
+        "klik /join untuk ikut\n"
         "minimal 3 pemain\n\n"
-        "host ketik /startspy untuk mulai\n\n"
+        "host klik /startspy untuk mulai\n\n"
         "👥 pemain:\n"
         "-"
     )
@@ -330,7 +330,7 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(f"{user.first_name} telah mengikuti permainan!")
 
-    text = "🕵️ GAME SPY DIMULAI\n\nketik /join untuk ikut\nminimal 3 pemain\n\nhost ketik /startspy untuk mulai\n\n👥 pemain:\n"
+    text = "🕵️ GAME SPY DIMULAI\n\nklik /join untuk ikut\nminimal 3 pemain\n\nhost klik /startspy untuk mulai\n\n👥 pemain:\n"
 
     for u in players.values():
         if u.username:
