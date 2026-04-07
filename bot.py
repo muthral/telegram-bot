@@ -2,7 +2,7 @@ import os
 import random
 import logging
 import asyncio
-from telegram import Update
+from telegram import Update, InputFile
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 logging.basicConfig(
@@ -22,10 +22,10 @@ spy_words = [
 "kucing","anjing","serigala","bunga","gelas","piring","dompet",
 "kasur","mobil","rumah","bantal","sendok","meja","kertas","dokumen",
 "sekolah","dokter","guru","perawat","asisten","celana","rok",
-"kerudung","sarung","televisi","parfum","charger","tetikus","kabel",
+"kerudung","sarung","tv","parfum","charger","tetikus","kabel",
 "plastik","tas","keyboard","uang","bank","hutang","ide","buku",
 "novel","kamus","kertas","berlian","cincin","emas","kopi","teh",
-"matcha","vanila","cireng","permen","jelly","coklat","pisau","keramik","vas"
+"matcha","vanila","cireng","permen","jelly","coklat","sisir","hairdryer","topi"
 ]
 
 jawaban = [
@@ -55,15 +55,15 @@ async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/apa\n"
         "/hitung\n"
         "/tagrandom\n"
-        "/tebakangka\n"
-        "/stoptebak\n\n"
+        "/tebakangka\n\n"
         "🎮 GAME SPY\n"
         "/spy\n"
         "/join\n"
         "/startspy\n"
         "/vote\n"
         "/pemain\n"
-        "/stopspy"
+        "/stopspy\n"
+        "/skip"
     )
 
 # =====================
@@ -115,23 +115,31 @@ async def tagrandom(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =====================
 
 async def apa(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    chat_id = update.message.chat_id
-
-    if not chat_aktif.get(chat_id, True):
-        return
-
     if not context.args:
-        await update.message.reply_text("masukkan pertanyaan")
+        await update.message.reply_text("masukkan pertanyaannya")
         return
 
     pertanyaan = " ".join(context.args).lower()
 
-    if "israel" in pertanyaan:
-        await update.message.reply_text("fuck israel")
+    if context.args[0].lower() == "kabar":
+        await update.message.reply_text("baik")
         return
 
-    await update.message.reply_text(random.choice(jawaban))
+    responses = []
+
+    if "islam" in pertanyaan or "kristen" in pertanyaan or "buddha" in pertanyaan or "konghucu" in pertanyaan or "hindu" in pertanyaan:
+        responses.append("jangan bawa2 agama")
+    if "bubar" in pertanyaan:
+        responses.append("jangan sebut B word")
+    if ("siyc" in pertanyaan or "sik" in pertanyaan) and ("camel" in pertanyaan or "kamel" in pertanyaan):
+        responses.append("gtw yang jelas camel dan siyc berjodoh <3")
+
+    if responses:
+        hasil = "\n".join(responses)
+    else:
+        hasil = random.choice(jawaban)
+
+    await update.message.reply_text(hasil)
 
 # =====================
 # HITUNG
@@ -231,7 +239,9 @@ async def spy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "votes":{},
         "msg_id":None,
         "spy":None,
-        "word":None
+        "word":None,
+        "vote_started":False,
+        "discussion_task":None
     }
 
     msg = await update.message.reply_text(
@@ -244,6 +254,13 @@ async def spy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     spy_sessions[chat_id]["msg_id"] = msg.message_id
+    
+    # Send image
+    try:
+        with open('images/waktunya_spy.jpg', 'rb') as photo:
+            await update.message.reply_photo(photo=InputFile(photo))
+    except:
+        pass
 
 # =====================
 
@@ -303,6 +320,82 @@ async def pemain(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # =====================
 
+async def start_discussion(chat_id, context):
+    await asyncio.sleep(120)
+    
+    if chat_id not in spy_sessions:
+        return
+    
+    if spy_sessions[chat_id].get("vote_started", False):
+        return
+    
+    await context.bot.send_message(
+        chat_id,
+        "🗳 diskusi selesai\n\n"
+        "sekarang vote spy\n"
+        "gunakan /vote @username\n\n"
+        "⏱ waktu vote 1 menit"
+    )
+    
+    # Send vote image
+    try:
+        with open('images/vote.jpg', 'rb') as photo:
+            await context.bot.send_photo(chat_id=chat_id, photo=InputFile(photo))
+    except:
+        pass
+    
+    spy_sessions[chat_id]["vote_started"] = True
+    
+    await asyncio.sleep(60)
+    
+    await end_vote(chat_id, context)
+
+async def end_vote(chat_id, context):
+    if chat_id not in spy_sessions:
+        return
+    
+    votes = spy_sessions[chat_id]["votes"]
+    players = spy_sessions[chat_id]["players"]
+    spy_id = spy_sessions[chat_id]["spy"]
+    word = spy_sessions[chat_id]["word"]
+
+    if not votes:
+        spy_user = players[spy_id]
+        name = spy_user.username if spy_user.username else spy_user.first_name
+
+        await context.bot.send_message(
+            chat_id,
+            f"😈 tidak ada vote\n\n"
+            f"SPY menang!\n\n"
+            f"spy adalah: {name}\n"
+            f"kata: {word}"
+        )
+
+        del spy_sessions[chat_id]
+        return
+
+    target = max(votes, key=votes.get)
+    spy_user = players[spy_id]
+    spy_name = spy_user.username if spy_user.username else spy_user.first_name
+
+    if int(target) == spy_id:
+        await context.bot.send_message(
+            chat_id,
+            f"🎉 SPY tertangkap!\n\n"
+            f"spy: {spy_name}\n"
+            f"kata: {word}\n\n"
+            f"warga menang!"
+        )
+    else:
+        await context.bot.send_message(
+            chat_id,
+            f"😈 spy lolos!\n\n"
+            f"spy: {spy_name}\n"
+            f"kata: {word}"
+        )
+
+    del spy_sessions[chat_id]
+
 async def startspy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_id = update.message.chat_id
@@ -321,26 +414,21 @@ async def startspy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     spy_sessions[chat_id]["spy"] = spy_player
     spy_sessions[chat_id]["word"] = word
+    spy_sessions[chat_id]["vote_started"] = False
 
     for uid,user in players.items():
-
         try:
-
             if uid == spy_player:
-
                 await context.bot.send_message(
                     uid,
                     "🕵️ kamu adalah SPY\n"
                     "coba menebak kata tanpa ketahuan"
                 )
-
             else:
-
                 await context.bot.send_message(
                     uid,
                     f"🕵️ game spy\n\nkatamu:\n{word}"
                 )
-
         except:
             pass
 
@@ -350,6 +438,13 @@ async def startspy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "⏱ waktu diskusi 2 menit\n\n"
         "cari siapa SPY nya"
     )
+    
+    # Send discussion image
+    try:
+        with open('images/waktunya_diskusi.jpg', 'rb') as photo:
+            await update.message.reply_photo(photo=InputFile(photo))
+    except:
+        pass
 
     await asyncio.sleep(60)
 
@@ -358,65 +453,8 @@ async def startspy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "⏰ tinggal 1 menit lagi!"
     )
 
-    await asyncio.sleep(60)
-
-    await context.bot.send_message(
-        chat_id,
-        "🗳 diskusi selesai\n\n"
-        "sekarang vote spy\n"
-        "gunakan /vote @username\n\n"
-        "⏱ waktu vote 1 menit"
-    )
-
-    await asyncio.sleep(60)
-
-    votes = spy_sessions[chat_id]["votes"]
-
-    spy_id = spy_sessions[chat_id]["spy"]
-    word = spy_sessions[chat_id]["word"]
-
-    if not votes:
-
-        spy_user = players[spy_id]
-
-        name = spy_user.username if spy_user.username else spy_user.first_name
-
-        await context.bot.send_message(
-            chat_id,
-            f"😈 tidak ada vote\n\n"
-            f"SPY menang!\n\n"
-            f"spy adalah: {name}\n"
-            f"kata: {word}"
-        )
-
-        del spy_sessions[chat_id]
-        return
-
-    target = max(votes, key=votes.get)
-
-    spy_user = players[spy_id]
-    spy_name = spy_user.username if spy_user.username else spy_user.first_name
-
-    if int(target) == spy_id:
-
-        await context.bot.send_message(
-            chat_id,
-            f"🎉 SPY tertangkap!\n\n"
-            f"spy: {spy_name}\n"
-            f"kata: {word}\n\n"
-            f"warga menang!"
-        )
-
-    else:
-
-        await context.bot.send_message(
-            chat_id,
-            f"😈 spy lolos!\n\n"
-            f"spy: {spy_name}\n"
-            f"kata: {word}"
-        )
-
-    del spy_sessions[chat_id]
+    # Start discussion timer
+    asyncio.create_task(start_discussion(chat_id, context))
 
 # =====================
 
@@ -425,9 +463,15 @@ async def vote(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
 
     if chat_id not in spy_sessions:
+        await update.message.reply_text("tidak ada game spy yang aktif")
+        return
+
+    if not spy_sessions[chat_id].get("vote_started", False):
+        await update.message.reply_text("belum waktunya vote, tunggu diskusi selesai")
         return
 
     if not context.args:
+        await update.message.reply_text("gunakan /vote @username")
         return
 
     username = context.args[0].replace("@","")
@@ -437,19 +481,66 @@ async def vote(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target_id = None
 
     for uid,user in players.items():
-
-        if user.username == username:
+        if user.username and user.username.lower() == username.lower():
             target_id = uid
+            break
 
     if not target_id:
         await update.message.reply_text("user tidak ditemukan")
         return
 
+    user_id = update.message.from_user.id
+    
+    if user_id in spy_sessions[chat_id].get("voted_users", set()):
+        await update.message.reply_text("kamu sudah vote sebelumnya")
+        return
+
+    if "voted_users" not in spy_sessions[chat_id]:
+        spy_sessions[chat_id]["voted_users"] = set()
+
+    spy_sessions[chat_id]["voted_users"].add(user_id)
     votes = spy_sessions[chat_id]["votes"]
 
-    votes[str(target_id)] = votes.get(str(target_id),0)+1
+    votes[str(target_id)] = votes.get(str(target_id), 0) + 1
 
-    await update.message.reply_text("vote diterima")
+    await update.message.reply_text(f"✅ vote untuk @{username} diterima")
+
+# =====================
+
+async def skip(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    chat_id = update.message.chat_id
+
+    if chat_id not in spy_sessions:
+        await update.message.reply_text("tidak ada game spy yang aktif")
+        return
+
+    if spy_sessions[chat_id].get("vote_started", False):
+        await update.message.reply_text("vote sudah dimulai, tidak bisa skip")
+        return
+
+    await update.message.reply_text("⏩ vote dimulai lebih awal!")
+    
+    # Cancel any pending discussion tasks
+    spy_sessions[chat_id]["vote_started"] = True
+    
+    await context.bot.send_message(
+        chat_id,
+        "🗳 vote dimulai lebih awal!\n\n"
+        "gunakan /vote @username\n\n"
+        "⏱ waktu vote 1 menit"
+    )
+    
+    # Send vote image
+    try:
+        with open('images/vote.jpg', 'rb') as photo:
+            await context.bot.send_photo(chat_id=chat_id, photo=InputFile(photo))
+    except:
+        pass
+    
+    await asyncio.sleep(60)
+    
+    await end_vote(chat_id, context)
 
 # =====================
 
@@ -487,6 +578,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("vote", vote))
     app.add_handler(CommandHandler("pemain", pemain))
     app.add_handler(CommandHandler("stopspy", stopspy))
+    app.add_handler(CommandHandler("skip", skip))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, proses_tebakan))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_member))
