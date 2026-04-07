@@ -16,8 +16,6 @@ TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 
 # =====================
 # STICKER FILE IDs
-# Ganti nilai di bawah ini dengan file_id sticker kamu
-# Cara dapet file_id: kirim stickernya ke @RawDataBot
 # =====================
 STICKER_SPY      = "CAACAgUAAxkBAAFGoEtp1J78ieeRSCFdt3ffBbaK5F3hWgAC8h4AAgFzoFaHuFm9FmtkxTsE"
 STICKER_DISKUSI  = "CAACAgUAAxkBAAFGoFFp1J-MAghOVIqTYYwRpixqyE9rRwAC6h0AApsHqFaDtRa9ufQrxzsE"
@@ -26,12 +24,12 @@ STICKER_VOTE     = "CAACAgUAAxkBAAFGoFNp1J-1aqIVxA_jOG4cnLM5SF07FAAC5R0AApsHqFZs
 chat_aktif = {}
 chat_members = {}
 # recent_chatters: {chat_id: deque of (timestamp, user)}
-# menyimpan 200 pesan terakhir per grup untuk keperluan /tag7
+# menyimpan 300 pesan terakhir per grup untuk keperluan /tag7
 recent_chatters = {}
 game_sessions = {}
 spy_sessions = {}
 
-MAX_RECENT = 200  # jumlah pesan terakhir yang dilacak
+MAX_RECENT = 300  # jumlah pesan terakhir yang dilacak
 
 spy_words = [
 "roti","mie","bubur","rendang","pempek","cimol","sate","ayam",
@@ -80,12 +78,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "📋 daftar command bot kutil ajaib\n\n"
-        "/apa\n"
-        "/hitung\n"
-        "/tagrandom\n"
-        "/tag7 - tag 7 orang random.\n"
-        "/tebakangka\n\n"
+         "📋 daftar command bot kutil ajaib\n\n"
+        "/apa [pertanyaan]\n"
+        "/hitung [pertanyaan]\n"
+        "/tagrandom - pilih satu member secara random\n"
+        "/tag7 - tag 7 member secara random\n\n"
+         "🎮 TEBAK ANGKA\n"
+        "/tebakangka\n"
+        "/stoptebak\n\n"
         "🎮 GAME SPY\n"
         "/spy\n"
         "/join\n"
@@ -158,7 +158,7 @@ async def tag7(update: Update, context: ContextTypes.DEFAULT_TYPE):
     recent = recent_chatters.get(chat_id)
 
     if not recent:
-        await update.message.reply_text("belum ada yang chat. chat dulu biar kedeteksi!")
+        await update.message.reply_text("belum cukup member terdeteksi!")
         return
 
     # Ambil user unik dari 200 pesan terakhir (atau 3 jam terakhir, mana yg lebih banyak)
@@ -174,7 +174,7 @@ async def tag7(update: Update, context: ContextTypes.DEFAULT_TYPE):
         seen_ids.add(user.id)
         kandidat.append(user)
 
-    # Filter berdasarkan waktu jika kandidat dari 200 pesan kurang dari 7
+    # Filter berdasarkan waktu jika kandidat dari 300 pesan kurang dari 7
     # kalau ada cukup orang dari 200 pesan terakhir, pakai semua
     # kalau tidak, ambil dari siapa saja yang pernah chat
     if len(kandidat) < 7:
