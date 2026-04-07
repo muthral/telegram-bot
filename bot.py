@@ -25,7 +25,7 @@ spy_words = [
 "kerudung","sarung","tv","parfum","charger","tetikus","kabel",
 "plastik","tas","keyboard","uang","bank","hutang","ide","buku",
 "novel","kamus","kertas","berlian","cincin","emas","kopi","teh",
-"matcha","vanila","cireng","permen","jelly","coklat","sisir","hairdryer","topi"
+"matcha","vanila","cireng","permen","jelly","coklat"
 ]
 
 jawaban = [
@@ -244,6 +244,14 @@ async def spy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "discussion_task":None
     }
 
+    # Send image first
+    try:
+        with open('images/waktunya_spy.jpg', 'rb') as photo:
+            await update.message.reply_photo(photo=InputFile(photo))
+    except:
+        pass
+
+    # Then send text
     msg = await update.message.reply_text(
         "🕵️ GAME SPY DIMULAI\n\n"
         "ketik /join untuk ikut\n"
@@ -254,13 +262,6 @@ async def spy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     spy_sessions[chat_id]["msg_id"] = msg.message_id
-    
-    # Send image
-    try:
-        with open('images/waktunya_spy.jpg', 'rb') as photo:
-            await update.message.reply_photo(photo=InputFile(photo))
-    except:
-        pass
 
 # =====================
 
@@ -329,6 +330,14 @@ async def start_discussion(chat_id, context):
     if spy_sessions[chat_id].get("vote_started", False):
         return
     
+    # Send image first
+    try:
+        with open('images/vote.jpg', 'rb') as photo:
+            await context.bot.send_photo(chat_id=chat_id, photo=InputFile(photo))
+    except:
+        pass
+    
+    # Then send text
     await context.bot.send_message(
         chat_id,
         "🗳 diskusi selesai\n\n"
@@ -336,13 +345,6 @@ async def start_discussion(chat_id, context):
         "gunakan /vote @username\n\n"
         "⏱ waktu vote 1 menit"
     )
-    
-    # Send vote image
-    try:
-        with open('images/vote.jpg', 'rb') as photo:
-            await context.bot.send_photo(chat_id=chat_id, photo=InputFile(photo))
-    except:
-        pass
     
     spy_sessions[chat_id]["vote_started"] = True
     
@@ -432,19 +434,20 @@ async def startspy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
+    # Send discussion image first
+    try:
+        with open('images/waktunya_diskusi.jpg', 'rb') as photo:
+            await update.message.reply_photo(photo=InputFile(photo))
+    except:
+        pass
+    
+    # Then send text
     await update.message.reply_text(
         "📨 kata sudah dikirim ke DM\n\n"
         "💬 diskusi dimulai!\n"
         "⏱ waktu diskusi 2 menit\n\n"
         "cari siapa SPY nya"
     )
-    
-    # Send discussion image
-    try:
-        with open('images/waktunya_diskusi.jpg', 'rb') as photo:
-            await update.message.reply_photo(photo=InputFile(photo))
-    except:
-        pass
 
     await asyncio.sleep(60)
 
@@ -524,19 +527,19 @@ async def skip(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Cancel any pending discussion tasks
     spy_sessions[chat_id]["vote_started"] = True
     
-    await context.bot.send_message(
-        chat_id,
+    # Send image first
+    try:
+        with open('images/vote.jpg', 'rb') as photo:
+            await update.message.reply_photo(photo=InputFile(photo))
+    except:
+        pass
+    
+    # Then send text
+    await update.message.reply_text(
         "🗳 vote dimulai lebih awal!\n\n"
         "gunakan /vote @username\n\n"
         "⏱ waktu vote 1 menit"
     )
-    
-    # Send vote image
-    try:
-        with open('images/vote.jpg', 'rb') as photo:
-            await context.bot.send_photo(chat_id=chat_id, photo=InputFile(photo))
-    except:
-        pass
     
     await asyncio.sleep(60)
     
