@@ -15,11 +15,6 @@ TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 chat_aktif = {}
 chat_members = {}
 game_sessions = {}
-
-# =====================
-# GAME SPY DATA
-# =====================
-
 spy_sessions = {}
 
 spy_words = [
@@ -27,10 +22,10 @@ spy_words = [
 "kucing","anjing","serigala","bunga","gelas","piring","dompet",
 "kasur","mobil","rumah","bantal","sendok","meja","kertas","dokumen",
 "sekolah","dokter","guru","perawat","asisten","celana","rok",
-"kerudung","sarung","tv","parfum","charger","tetikus","kabel",
+"kerudung","sarung","televisi","parfum","charger","tetikus","kabel",
 "plastik","tas","keyboard","uang","bank","hutang","ide","buku",
 "novel","kamus","kertas","berlian","cincin","emas","kopi","teh",
-"matcha","vanila","cireng","permen","jelly","coklat"
+"matcha","vanila","cireng","permen","jelly","coklat","pisau","keramik","vas"
 ]
 
 jawaban = [
@@ -43,36 +38,42 @@ jawaban = [
 "km nanyea?","aah ah ahhh..","🤤🤤🤤","hehe, ga","*ngangguk","jangan sekarang",
 ]
 
+# =====================
+# BASIC COMMAND
+# =====================
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.chat.type == "private":
-        pesan = (
+        await update.message.reply_text(
             "selamat datang di bot kutil ajaib\n\n"
             "gunakan /help untuk melihat command."
         )
-        await update.message.reply_text(pesan)
 
 async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    pesan = (
-        "📋 daftar command bot kutil ajaib:\n\n"
-        "/apa [pertanyaan]\n"
-        "/hitung [pertanyaan]\n"
-        "/istirahat - non aktifkan bot\n"
-        "/bangun - aktifkan bot kembali\n"
-        "/tagrandom - tag satu member secara random\n"
-        "/tebakangka - permainan tebak angka\n"
-        "/stoptebak\n"
-        "/spy - game spy\n"
-        "/join - ikut game spy\n"
-        "/startspy - mulai game spy\n"
-        "/vote @user - vote spy\n"
-        "/stopspy\n"
-        "/help"
+    await update.message.reply_text(
+        "📋 daftar command bot kutil ajaib\n\n"
+        "/apa\n"
+        "/hitung\n"
+        "/tagrandom\n"
+        "/tebakangka\n"
+        "/stoptebak\n\n"
+        "🎮 GAME SPY\n"
+        "/spy\n"
+        "/join\n"
+        "/startspy\n"
+        "/vote\n"
+        "/pemain\n"
+        "/stopspy"
     )
-    await update.message.reply_text(pesan)
+
+# =====================
+# MEMBER TRACK
+# =====================
 
 async def track_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.from_user:
+    if not update.message:
         return
+
     user = update.message.from_user
     if user.is_bot:
         return
@@ -84,12 +85,17 @@ async def track_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_members[chat_id][user.id] = user
 
+# =====================
+# TAG RANDOM
+# =====================
+
 async def tagrandom(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     chat_id = update.message.chat_id
     members = chat_members.get(chat_id, {})
 
     if not members:
-        await update.message.reply_text("belum ada member yang terdeteksi 😅")
+        await update.message.reply_text("belum ada member terdeteksi")
         return
 
     user = random.choice(list(members.values()))
@@ -100,141 +106,115 @@ async def tagrandom(update: Update, context: ContextTypes.DEFAULT_TYPE):
         mention = f'<a href="tg://user?id={user.id}">{user.first_name}</a>'
 
     await update.message.reply_text(
-        f"yang terpilih: {mention} 🎯",
+        f"yang terpilih: {mention}",
         parse_mode="HTML"
     )
 
-async def hitung(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("masukkan pertanyaannya")
-        return
-
-    pertanyaan = " ".join(context.args).lower()
-    angka = random.randint(0, 100)
-
-    if "persen" in pertanyaan:
-        hasil = f"{angka}%"
-    else:
-        hasil = str(angka)
-
-    await update.message.reply_text(hasil)
-
-async def bangun(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.message.chat_id
-    chat_aktif[chat_id] = True
-    await update.message.reply_text("bot sudah bangun!")
-
-async def istirahat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.message.chat_id
-    chat_aktif[chat_id] = False
-    await update.message.reply_text("bot istirahat 😴")
+# =====================
+# APA
+# =====================
 
 async def apa(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     chat_id = update.message.chat_id
 
     if not chat_aktif.get(chat_id, True):
         return
 
     if not context.args:
-        await update.message.reply_text("masukkan pertanyaannya")
+        await update.message.reply_text("masukkan pertanyaan")
         return
 
     pertanyaan = " ".join(context.args).lower()
 
-    responses = []
-
-    if "islam" in pertanyaan or "kristen" in pertanyaan or "buddha" in pertanyaan or "hindu" in pertanyaan:
-        responses.append("jangan bawa agama")
-
     if "israel" in pertanyaan:
-        responses.append("fuck israel")
+        await update.message.reply_text("fuck israel")
+        return
 
-    if responses:
-        hasil = "\n".join(responses)
-    else:
-        hasil = random.choice(jawaban)
-
-    await update.message.reply_text(hasil)
+    await update.message.reply_text(random.choice(jawaban))
 
 # =====================
-# GAME TEBAK ANGKA
+# HITUNG
+# =====================
+
+async def hitung(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not context.args:
+        await update.message.reply_text("masukkan pertanyaan")
+        return
+
+    angka = random.randint(0,100)
+    await update.message.reply_text(str(angka))
+
+# =====================
+# TEBAK ANGKA
 # =====================
 
 async def tebakangka(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_id = update.message.chat_id
     user_id = update.message.from_user.id
-    key = (chat_id, user_id)
+
+    key = (chat_id,user_id)
 
     if key in game_sessions:
         await update.message.reply_text("kamu masih bermain")
         return
 
-    angka = random.randint(0, 100)
+    angka = random.randint(0,100)
 
     game_sessions[key] = {
-        "angka": angka,
-        "tebakan": 0
+        "angka":angka,
+        "tebakan":0
     }
 
     await update.message.reply_text(
-        "permainan tebak angka dimulai.\n"
-        "masukkan satu angka antara 0 sampai 100!\n"
+        "permainan dimulai\n"
+        "tebak angka 0 - 100"
     )
 
 async def stoptebak(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_id = update.message.chat_id
     user_id = update.message.from_user.id
-    key = (chat_id, user_id)
+    key = (chat_id,user_id)
 
-    if key not in game_sessions:
-        await update.message.reply_text("kamu tidak sedang bermain")
-        return
-
-    del game_sessions[key]
+    if key in game_sessions:
+        del game_sessions[key]
 
     await update.message.reply_text("game dihentikan")
 
 async def proses_tebakan(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    if not update.message:
-        return
-
     chat_id = update.message.chat_id
     user_id = update.message.from_user.id
-    key = (chat_id, user_id)
+
+    key = (chat_id,user_id)
 
     if key not in game_sessions:
         return
 
-    text = update.message.text.strip()
+    text = update.message.text
 
     if not text.isdigit():
         return
 
     tebakan = int(text)
-
-    if tebakan < 0 or tebakan > 100:
-        return
-
     session = game_sessions[key]
+
     angka = session["angka"]
 
     session["tebakan"] += 1
-    jumlah = session["tebakan"]
 
     if tebakan > angka:
-        await update.message.reply_text("angkamu terlalu besar")
+        await update.message.reply_text("terlalu besar")
         return
 
     if tebakan < angka:
-        await update.message.reply_text("angkamu terlalu kecil")
+        await update.message.reply_text("terlalu kecil")
         return
 
-    await update.message.reply_text(
-        f"kamu berhasil menebaknya dalam {jumlah} kali tebakan."
-    )
+    await update.message.reply_text("benar!")
 
     del game_sessions[key]
 
@@ -247,17 +227,25 @@ async def spy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
 
     spy_sessions[chat_id] = {
-        "players": {},
-        "started": False,
-        "votes": {}
+        "players":{},
+        "votes":{},
+        "msg_id":None,
+        "spy":None,
+        "word":None
     }
 
-    await update.message.reply_text(
+    msg = await update.message.reply_text(
         "🕵️ GAME SPY DIMULAI\n\n"
-        "ketik /join untuk ikut.\n"
+        "ketik /join untuk ikut\n"
         "minimal 3 pemain\n\n"
-        "host ketik /startspy untuk mulai"
+        "host ketik /startspy untuk mulai\n\n"
+        "👥 pemain:\n"
+        "-"
     )
+
+    spy_sessions[chat_id]["msg_id"] = msg.message_id
+
+# =====================
 
 async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -269,12 +257,51 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     spy_sessions[chat_id]["players"][user.id] = user
 
-    total = len(spy_sessions[chat_id]["players"])
+    players = spy_sessions[chat_id]["players"]
 
-    await update.message.reply_text(
-        f"{user.first_name} bergabung\n"
-        f"total pemain: {total}"
+    text = "🕵️ GAME SPY\n\nketik /join untuk ikut\n\n👥 pemain:\n"
+
+    for u in players.values():
+
+        if u.username:
+            text += f"@{u.username}\n"
+        else:
+            text += u.first_name + "\n"
+
+    await context.bot.edit_message_text(
+        chat_id=chat_id,
+        message_id=spy_sessions[chat_id]["msg_id"],
+        text=text
     )
+
+# =====================
+
+async def pemain(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    chat_id = update.message.chat_id
+
+    if chat_id not in spy_sessions:
+        await update.message.reply_text("belum ada game")
+        return
+
+    players = spy_sessions[chat_id]["players"]
+
+    if not players:
+        await update.message.reply_text("belum ada pemain")
+        return
+
+    text = "👥 pemain spy:\n\n"
+
+    for u in players.values():
+
+        if u.username:
+            text += f"@{u.username}\n"
+        else:
+            text += u.first_name + "\n"
+
+    await update.message.reply_text(text)
+
+# =====================
 
 async def startspy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -294,39 +321,104 @@ async def startspy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     spy_sessions[chat_id]["spy"] = spy_player
     spy_sessions[chat_id]["word"] = word
-    spy_sessions[chat_id]["started"] = True
 
-    for uid, user in players.items():
+    for uid,user in players.items():
 
         try:
 
             if uid == spy_player:
+
                 await context.bot.send_message(
                     uid,
-                    "🕵️ kamu adalah SPY!\n"
-                    "coba tebak kata tanpa ketahuan"
+                    "🕵️ kamu adalah SPY\n"
+                    "coba menebak kata tanpa ketahuan"
                 )
+
             else:
+
                 await context.bot.send_message(
                     uid,
-                    f"🕵️ game spy\n\nkatamu adalah:\n\n{word}"
+                    f"🕵️ game spy\n\nkatamu:\n{word}"
                 )
 
         except:
             pass
 
     await update.message.reply_text(
-        "kata sudah dikirim ke DM\n\n"
-        "diskusi dimulai!\n"
-        "waktu: 2 menit"
+        "📨 kata sudah dikirim ke DM\n\n"
+        "💬 diskusi dimulai!\n"
+        "⏱ waktu diskusi 2 menit\n\n"
+        "cari siapa SPY nya"
     )
 
-    await asyncio.sleep(120)
+    await asyncio.sleep(60)
 
     await context.bot.send_message(
         chat_id,
-        "⏳ waktu habis!\n\nvote spy:\n/vote @username"
+        "⏰ tinggal 1 menit lagi!"
     )
+
+    await asyncio.sleep(60)
+
+    await context.bot.send_message(
+        chat_id,
+        "🗳 diskusi selesai\n\n"
+        "sekarang vote spy\n"
+        "gunakan /vote @username\n\n"
+        "⏱ waktu vote 1 menit"
+    )
+
+    await asyncio.sleep(60)
+
+    votes = spy_sessions[chat_id]["votes"]
+
+    spy_id = spy_sessions[chat_id]["spy"]
+    word = spy_sessions[chat_id]["word"]
+
+    if not votes:
+
+        spy_user = players[spy_id]
+
+        name = spy_user.username if spy_user.username else spy_user.first_name
+
+        await context.bot.send_message(
+            chat_id,
+            f"😈 tidak ada vote\n\n"
+            f"SPY menang!\n\n"
+            f"spy adalah: {name}\n"
+            f"kata: {word}"
+        )
+
+        del spy_sessions[chat_id]
+        return
+
+    target = max(votes, key=votes.get)
+
+    spy_user = players[spy_id]
+    spy_name = spy_user.username if spy_user.username else spy_user.first_name
+
+    if int(target) == spy_id:
+
+        await context.bot.send_message(
+            chat_id,
+            f"🎉 SPY tertangkap!\n\n"
+            f"spy: {spy_name}\n"
+            f"kata: {word}\n\n"
+            f"warga menang!"
+        )
+
+    else:
+
+        await context.bot.send_message(
+            chat_id,
+            f"😈 spy lolos!\n\n"
+            f"spy: {spy_name}\n"
+            f"kata: {word}"
+        )
+
+    del spy_sessions[chat_id]
+
+# =====================
 
 async def vote(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -338,14 +430,28 @@ async def vote(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         return
 
-    target = context.args[0].replace("@","")
+    username = context.args[0].replace("@","")
 
-    if target not in spy_sessions[chat_id]["votes"]:
-        spy_sessions[chat_id]["votes"][target] = 0
+    players = spy_sessions[chat_id]["players"]
 
-    spy_sessions[chat_id]["votes"][target] += 1
+    target_id = None
+
+    for uid,user in players.items():
+
+        if user.username == username:
+            target_id = uid
+
+    if not target_id:
+        await update.message.reply_text("user tidak ditemukan")
+        return
+
+    votes = spy_sessions[chat_id]["votes"]
+
+    votes[str(target_id)] = votes.get(str(target_id),0)+1
 
     await update.message.reply_text("vote diterima")
+
+# =====================
 
 async def stopspy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -367,19 +473,19 @@ if __name__ == "__main__":
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help))
-    app.add_handler(CommandHandler("bangun", bangun))
-    app.add_handler(CommandHandler("istirahat", istirahat))
+
     app.add_handler(CommandHandler("apa", apa))
     app.add_handler(CommandHandler("hitung", hitung))
     app.add_handler(CommandHandler("tagrandom", tagrandom))
+
     app.add_handler(CommandHandler("tebakangka", tebakangka))
     app.add_handler(CommandHandler("stoptebak", stoptebak))
 
-    # spy
     app.add_handler(CommandHandler("spy", spy))
     app.add_handler(CommandHandler("join", join))
     app.add_handler(CommandHandler("startspy", startspy))
     app.add_handler(CommandHandler("vote", vote))
+    app.add_handler(CommandHandler("pemain", pemain))
     app.add_handler(CommandHandler("stopspy", stopspy))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, proses_tebakan))
