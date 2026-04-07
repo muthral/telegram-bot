@@ -199,7 +199,7 @@ async def tag7(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             mentions.append(f'<a href="tg://user?id={user.id}">{user.first_name}</a>')
 
-    hasil = " ".join(mentions)
+    hasil = ", ".join(mentions)
     await update.message.reply_text(
         f"🎯 {hasil}",
         parse_mode="HTML"
@@ -366,14 +366,15 @@ async def spy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_sticker(update, STICKER_SPY, context, is_reply=True)
 
     msg = await update.message.reply_text(
-        "🕵️ GAME SPY DIMULAI\n"
+        "🕵️ <b><u>GAME SPY DIMULAI</u></b>\n"
         "semua pemain akan mendapat pesan rahasia, hanya spy yang tidak mendapatkannya. "
         "Bisakah kalian menebak siapa SPY nya?\n\n"
         "klik /join untuk ikut\n"
         "minimal 3 pemain\n\n"
         "klik /startspy untuk mulai\n\n"
         "👥 pemain:\n"
-        "-"
+        "-",
+        parse_mode="HTML"
     )
 
     spy_sessions[chat_id]["msg_id"] = msg.message_id
