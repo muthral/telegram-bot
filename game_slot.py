@@ -1,6 +1,6 @@
 import random
 from telegram import Update
-from telegram.ext import ContextTypes
+from telegram.ext💎 import ContextTypes
 
 from data import (
     wallet, SLOT_EMOJIS, DIAMOND,
