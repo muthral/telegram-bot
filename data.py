@@ -1,3 +1,5 @@
+import json
+import os
 from collections import deque
 
 # =====================
@@ -14,11 +16,12 @@ chat_members = {}
 recent_chatters = {}
 scores = {}       # {chat_id: {user_id: {"name": str, "score": int}}}
 wallet = {}       # {user_id: {"name": str, "saldo": int}}
+user_badges = {}  # {user_id: str}  e.g. {123: "💖"}
 
 game_sessions = {}    # /angka (solo)   key: (chat_id, user_id)
 chaos_sessions = {}   # /angkachaos    key: chat_id
 duel_sessions = {}    # /angkaduel     key: chat_id
-duel_dm_pending = {}  # user_id -> chat_id (menunggu input angka rahasia via DM)
+duel_dm_pending = {}  # user_id -> chat_id
 
 spy_sessions = {}
 spy_guess_pending = {}
@@ -31,9 +34,62 @@ MAX_RECENT = 300
 SLOT_EMOJIS = ["🍎", "🍋", "🍊", "🍇", "⭐", "🎯", "🎰", "💎"]
 DIAMOND = "💎"
 SLOT_COST = 5_000
-SLOT_WIN_NORMAL = 50_000
-SLOT_WIN_DIAMOND = 100_000
+SLOT_WIN_NORMAL = 500_000
+SLOT_WIN_DIAMOND = 1_000_000
 SLOT_INITIAL = 100_000
+
+# =====================
+# SHOP CONFIG
+# =====================
+SHOP_ITEMS = {
+    "💖": 1_000_000,
+    "✨": 5_000_000,
+    "🪽": 10_000_000,
+    "💎": 20_000_000,
+}
+
+# =====================
+# PERSISTENCE
+# =====================
+WALLET_FILE = os.path.join(os.path.dirname(__file__), "wallet_data.json")
+BADGES_FILE = os.path.join(os.path.dirname(__file__), "badges_data.json")
+
+def save_wallet():
+    try:
+        with open(WALLET_FILE, "w") as f:
+            json.dump({str(k): v for k, v in wallet.items()}, f)
+    except Exception:
+        pass
+
+def load_wallet():
+    if os.path.exists(WALLET_FILE):
+        try:
+            with open(WALLET_FILE) as f:
+                data = json.load(f)
+                for k, v in data.items():
+                    wallet[int(k)] = v
+        except Exception:
+            pass
+
+def save_badges():
+    try:
+        with open(BADGES_FILE, "w") as f:
+            json.dump({str(k): v for k, v in user_badges.items()}, f)
+    except Exception:
+        pass
+
+def load_badges():
+    if os.path.exists(BADGES_FILE):
+        try:
+            with open(BADGES_FILE) as f:
+                data = json.load(f)
+                for k, v in data.items():
+                    user_badges[int(k)] = v
+        except Exception:
+            pass
+
+load_wallet()
+load_badges()
 
 # =====================
 # HELPER FUNCTIONS
@@ -59,14 +115,16 @@ def add_score(chat_id, user, points: int):
     if chat_id not in scores:
         scores[chat_id] = {}
     uid = user.id
-    name = f"@{user.username}" if user.username else user.first_name
+    name = get_nama(user)
     if uid not in scores[chat_id]:
         scores[chat_id][uid] = {"name": name, "score": 0}
     scores[chat_id][uid]["score"] += points
     scores[chat_id][uid]["name"] = name
 
 def get_nama(user) -> str:
-    return f"@{user.username}" if user.username else user.first_name
+    base = f"@{user.username}" if user.username else user.first_name
+    badge = user_badges.get(user.id, "")
+    return f"{base} {badge}" if badge else base
 
 def format_rupiah(jumlah: int) -> str:
     neg = jumlah < 0
@@ -74,9 +132,7 @@ def format_rupiah(jumlah: int) -> str:
     return f"-Rp {s},-" if neg else f"Rp {s},-"
 
 def get_saldo(user_id: int) -> int:
-    if user_id not in wallet:
-        return SLOT_INITIAL
-    return wallet[user_id]["saldo"]
+    return wallet.get(user_id, {}).get("saldo", SLOT_INITIAL)
 
 def init_wallet(user):
     uid = user.id
