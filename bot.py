@@ -6,6 +6,7 @@ from commands import start, help_cmd, apa, hitung, tagrandom, tag7, skor, track_
 from game_tebak import angka, stoptebak, angkachaos, stopchaos, angkaduel, joinduel, startduel, stopduel
 from game_spy import spy, join, startspy, vote, pemain, stopspy, skip
 from game_slot import slot, kekayaan
+from game_shop import shop, beli
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -40,6 +41,8 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("stopduel", stopduel))
 
     app.add_handler(CommandHandler("slot", slot))
+    app.add_handler(CommandHandler("shop", shop))
+    app.add_handler(CommandHandler("beli", beli))
 
     app.add_handler(CommandHandler("spy", spy))
     app.add_handler(CommandHandler("join", join))
