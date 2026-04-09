@@ -60,12 +60,12 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
     spy_sessions[chat_id]["players"][user.id] = user
     players = spy_sessions[chat_id]["players"]
 
-    nama = get_nama(user)
+    nama = await get_nama(user)
     await update.message.reply_text(f"{nama} telah mengikuti permainan!")
 
     text = "🕵️ GAME SPY\n\nklik /join untuk ikut\nminimal 3 pemain\n\nhost klik /startspy untuk mulai\n\n👥 pemain:\n"
     for u in players.values():
-        text += f"{get_nama(u)}\n"
+        text += f"{await get_nama(u)}\n"
 
     try:
         await context.bot.edit_message_text(
@@ -91,7 +91,7 @@ async def pemain(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = "👥 pemain spy:\n\n"
     for u in players.values():
-        text += f"{get_nama(u)}\n"
+        text += f"{await get_nama(u)}\n"
 
     await update.message.reply_text(text)
 
@@ -188,7 +188,7 @@ async def end_vote(chat_id, context):
     word = spy_sessions[chat_id]["word"]
 
     spy_user = players[spy_id]
-    spy_name = get_nama(spy_user)
+    spy_name = await get_nama(spy_user)
 
     del spy_sessions[chat_id]
 
@@ -239,7 +239,7 @@ async def end_vote(chat_id, context):
             )
     else:
         voted_user = players.get(int(target))
-        voted_name = get_nama(voted_user) if voted_user else "?"
+        voted_name = await get_nama(voted_user) if voted_user else "?"
 
         await context.bot.send_message(
             chat_id,
