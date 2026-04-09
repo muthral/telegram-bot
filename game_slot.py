@@ -5,7 +5,7 @@ from telegram.ext import ContextTypes
 from data import (
     wallet, SLOT_EMOJIS, DIAMOND,
     SLOT_COST, SLOT_WIN_NORMAL, SLOT_WIN_DIAMOND, SLOT_INITIAL,
-    init_wallet, get_saldo, format_rupiah, get_nama
+    init_wallet, get_saldo, format_rupiah, get_nama, save_wallet
 )
 
 async def slot(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -37,6 +37,9 @@ async def slot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     else:
         hasil_teks = "😢 tidak ada yang cocok, coba lagi!"
+
+    # Simpan wallet setelah perubahan saldo
+    save_wallet()
 
     saldo_akhir = wallet[uid]["saldo"]
 
