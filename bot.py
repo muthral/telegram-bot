@@ -67,6 +67,5 @@ if __name__ == "__main__":
     try:
         app.run_polling()
     finally:
-        # Tutup pool database saat bot berhenti
         import asyncio
         asyncio.run(close_pool())
