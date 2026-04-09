@@ -3,8 +3,8 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from data import (
-    wallet, SLOT_EMOJIS, DIAMOND,
-    SLOT_COST, SLOT_WIN_NORMAL, SLOT_WIN_DIAMOND, SLOT_INITIAL,
+    wallet, SLOT_EMOJIS, DIAMOND, SUPER_JACKPOT_EMOJI,
+    SLOT_COST, SLOT_WIN_NORMAL, SLOT_WIN_DIAMOND, SLOT_WIN_SUPER, SLOT_INITIAL,
     init_wallet, get_saldo, format_rupiah, get_nama, save_wallet
 )
 
@@ -22,7 +22,14 @@ async def slot(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     semua_sama = reel[0] == reel[1] == reel[2]
 
-    if semua_sama and reel[0] == DIAMOND:
+    if semua_sama and reel[0] == SUPER_JACKPOT_EMOJI:
+        wallet[uid]["saldo"] += SLOT_WIN_SUPER
+        hasil_teks = (
+            f"🪽🪽🪽 <b>SUPER JACKPOT!!</b> 🪽🪽🪽\n\n"
+            f"WOOWWW KAMU LUAR BIASA BERUNTUNG!!! 🎉🎉🎉\n\n"
+            f"menang <b>{format_rupiah(SLOT_WIN_SUPER)}</b>!"
+        )
+    elif semua_sama and reel[0] == DIAMOND:
         wallet[uid]["saldo"] += SLOT_WIN_DIAMOND
         hasil_teks = (
             f"💎💎💎 <b>JACKPOT DIAMOND!!</b> 💎💎💎\n\n"
