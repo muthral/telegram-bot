@@ -45,7 +45,6 @@ async def slot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         hasil_teks = "😢 tidak ada yang cocok, coba lagi!"
 
-    # Simpan wallet setelah perubahan saldo
     save_wallet()
 
     saldo_akhir = wallet[uid]["saldo"]
@@ -70,9 +69,12 @@ async def kekayaan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "💰 <b>DAFTAR KEKAYAAN PEMAIN</b>\n\n"
     for i, (uid, info) in enumerate(sorted_wallet, 1):
         saldo = info["saldo"]
-        nama = info["name"]
+        raw_name = info["name"]
+        from data import user_badges
+        badges = user_badges.get(uid, [])
+        display_name = f"{raw_name} {''.join(badges)}" if badges else raw_name
         emoji = "🤑" if saldo > SLOT_INITIAL else ("😢" if saldo < 0 else "😐")
-        text += f"{i}. {nama} — {format_rupiah(saldo)} {emoji}\n"
+        text += f"{i}. {display_name} — {format_rupiah(saldo)} {emoji}\n"
 
     text += f"\n💡 saldo awal: {format_rupiah(SLOT_INITIAL)}\n🎰 bayar per spin: {format_rupiah(SLOT_COST)}"
 
