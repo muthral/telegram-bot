@@ -106,7 +106,7 @@ async def init_wallet(user):
     name = get_raw_name(user)
     data = await db_get_wallet(uid)
     if data is None:
-        # Cek placeholder
+        # Cek placeholder (user_id=0) dengan nama yang sama
         placeholder = await db_get_wallet_by_name(name)
         if placeholder:
             await db_set_wallet(uid, name, placeholder["saldo"])
@@ -128,6 +128,7 @@ async def add_score(chat_id, user, points: int):
     new_score = current + points
     await db_set_score(chat_id, uid, name, new_score)
 
+# Placeholder untuk kompatibilitas (tidak digunakan)
 async def save_scores():
     pass
 
