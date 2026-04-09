@@ -1,11 +1,10 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 from data import (
-    SHOP_ITEMS, EXCHANGE_RATES, MAX_BADGES,
+    SHOP_ITEMS, EXCHANGE_RATES, MAX_BADGES, SLOT_INITIAL,
     init_wallet, format_rupiah, get_nama, get_raw_name,
-    db_get_wallet, db_set_wallet, db_get_badges, db_set_badges,
-    db_get_scores, db_set_score
 )
+from db import db_get_wallet, db_set_wallet, db_get_badges, db_set_badges, db_get_scores, db_set_score
 
 pending_badge_replace = {}
 
@@ -78,7 +77,7 @@ async def beli(update: Update, context: ContextTypes.DEFAULT_TYPE):
     harga = SHOP_ITEMS[target_badge]
     await init_wallet(user)
     wallet_data = await db_get_wallet(uid)
-    saldo = wallet_data["saldo"] if wallet_data else 0
+    saldo = wallet_data["saldo"] if wallet_data else SLOT_INITIAL
 
     if saldo < harga:
         kurang = harga - saldo
@@ -184,11 +183,9 @@ async def tukar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     rupiah_didapat = EXCHANGE_RATES[skor_ditukar]
 
-    # Kurangi skor
     new_score = current_score - skor_ditukar
     await db_set_score(chat_id, user.id, get_raw_name(user), new_score)
 
-    # Tambah saldo
     await init_wallet(user)
     wallet_data = await db_get_wallet(user.id)
     saldo = wallet_data["saldo"] if wallet_data else SLOT_INITIAL
