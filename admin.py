@@ -4,7 +4,6 @@ from telegram.ext import ContextTypes
 from data import get_nama, format_rupiah, init_wallet, get_raw_name
 from db import db_get_wallet, db_set_wallet, db_get_scores, db_set_score, db_get_wallet_by_name
 
-# Ambil ID admin dari environment variable, pisahkan dengan koma
 ADMIN_IDS_STR = os.environ.get("BOT_ADMIN_IDS", "")
 ADMIN_IDS = set()
 for part in ADMIN_IDS_STR.split(","):
@@ -34,16 +33,13 @@ async def setsaldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     jumlah = int(jumlah_str)
 
-    # Cari user berdasarkan username atau reply
     target_user = None
     if update.message.reply_to_message:
         target_user = update.message.reply_to_message.from_user
     else:
         username = username_part.lstrip("@")
-        # Coba cari di wallet dengan nama @username (placeholder user_id=0)
         placeholder = await db_get_wallet_by_name(f"@{username}")
         if placeholder:
-            # Buat dummy user object dengan user_id=0
             class DummyUser:
                 def __init__(self, uid, name):
                     self.id = uid
@@ -55,7 +51,7 @@ async def setsaldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
     uid = target_user.id
-    await init_wallet(target_user)  # Pastikan wallet ada, bisa update dari placeholder
+    await init_wallet(target_user)
     await db_set_wallet(uid, get_raw_name(target_user), jumlah)
 
     await update.message.reply_text(
