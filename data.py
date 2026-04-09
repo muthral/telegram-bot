@@ -16,7 +16,7 @@ chat_members = {}
 recent_chatters = {}
 scores = {}       # {chat_id: {user_id: {"name": str, "score": int}}}
 wallet = {}       # {user_id: {"name": str, "saldo": int}}
-user_badges = {}  # {user_id: str}  e.g. {123: "💖"}
+user_badges = {}  # {user_id: list[str]}   <-- sekarang list, bukan string tunggal
 
 game_sessions = {}    # /angka (solo)   key: (chat_id, user_id)
 chaos_sessions = {}   # /angkachaos    key: chat_id
@@ -27,6 +27,7 @@ spy_sessions = {}
 spy_guess_pending = {}
 
 MAX_RECENT = 300
+MAX_BADGES = 10      # batas maksimal badge per pengguna
 
 # =====================
 # SLOT CONFIG
@@ -48,6 +49,18 @@ SHOP_ITEMS = {
     "✨": 5_000_000,
     "💎": 10_000_000,
     "🪽": 20_000_000,
+    "🔮": 50_000_000,
+    "👑": 100_000_000,
+}
+
+# =====================
+# EXCHANGE RATES (skor -> saldo)
+# =====================
+EXCHANGE_RATES = {
+    500: 200_000,
+    1000: 500_000,
+    2000: 2_000_000,
+    3000: 5_000_000,
 }
 
 # =====================
@@ -88,13 +101,16 @@ def load_badges():
             with open(BADGES_FILE) as f:
                 data = json.load(f)
                 for k, v in data.items():
-                    user_badges[int(k)] = v
+                    # v bisa berupa string (data lama) atau list (data baru)
+                    if isinstance(v, str):
+                        user_badges[int(k)] = [v]   # konversi ke list
+                    elif isinstance(v, list):
+                        user_badges[int(k)] = v
         except Exception:
             pass
 
 def save_scores():
     try:
-        # Ubah key chat_id menjadi string untuk JSON
         data_to_save = {}
         for chat_id, users in scores.items():
             data_to_save[str(chat_id)] = {}
@@ -146,17 +162,30 @@ def add_score(chat_id, user, points: int):
     if chat_id not in scores:
         scores[chat_id] = {}
     uid = user.id
-    name = get_nama(user)
+    name = get_raw_name(user)   # simpan nama dasar tanpa badge
     if uid not in scores[chat_id]:
         scores[chat_id][uid] = {"name": name, "score": 0}
     scores[chat_id][uid]["score"] += points
     scores[chat_id][uid]["name"] = name
-    save_scores()  # Simpan setiap kali skor berubah
+    save_scores()
 
-def get_nama(user) -> str:
-    base = f"@{user.username}" if user.username else user.first_name
-    badge = user_badges.get(user.id, "")
-    return f"{base} {badge}" if badge else base
+def get_raw_name(user) -> str:
+    """Nama dasar tanpa badge."""
+    return f"@{user.username}" if user.username else user.first_name
+
+def get_display_name(user) -> str:
+    """Nama dengan semua badge yang dimiliki."""
+    base = get_raw_name(user)
+    badges = user_badges.get(user.id, [])
+    if badges:
+        badge_str = "".join(badges)
+        return f"{base} {badge_str}"
+    return base
+
+# Untuk kompatibilitas dengan kode lama yang memanggil get_nama,
+# kita biarkan get_nama = get_display_name agar semua tampilan langsung berbadge.
+# Sedangkan penyimpanan data menggunakan get_raw_name.
+get_nama = get_display_name
 
 def format_rupiah(jumlah: int) -> str:
     neg = jumlah < 0
@@ -168,13 +197,14 @@ def get_saldo(user_id: int) -> int:
 
 def init_wallet(user):
     uid = user.id
+    name = get_raw_name(user)   # simpan nama dasar
     if uid not in wallet:
         wallet[uid] = {
-            "name": get_nama(user),
+            "name": name,
             "saldo": SLOT_INITIAL
         }
     else:
-        wallet[uid]["name"] = get_nama(user)
+        wallet[uid]["name"] = name
 
 async def send_sticker(chat_id_or_update, sticker_id, context, is_reply=False):
     try:
