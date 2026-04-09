@@ -1,154 +1,249 @@
-import json
 import os
-from collections import deque
+from telegram import Update
+from telegram.ext import ContextTypes
+from data import wallet, scores, save_wallet, save_scores, get_nama, format_rupiah, init_wallet
 
-# =====================
-# STICKER FILE IDs
-# =====================
-STICKER_SPY      = "CAACAgUAAxkBAAFGoEtp1J78ieeRSCFdt3ffBbaK5F3hWgAC8h4AAgFzoFaHuFm9FmtkxTsE"
-STICKER_DISKUSI  = "CAACAgUAAxkBAAFGoFFp1J-MAghOVIqTYYwRpixqyE9rRwAC6h0AApsHqFaDtRa9ufQrxzsE"
-STICKER_VOTE     = "CAACAgUAAxkBAAFGoFNp1J-1aqIVxA_jOG4cnLM5SF07FAAC5R0AApsHqFZswZfoLh6n_DsE"
+# Ambil ID admin dari environment variable, pisahkan dengan koma
+ADMIN_IDS_STR = os.environ.get("BOT_ADMIN_IDS", "")
+ADMIN_IDS = set()
+for part in ADMIN_IDS_STR.split(","):
+    part = part.strip()
+    if part.isdigit():
+        ADMIN_IDS.add(int(part))
 
-# =====================
-# SHARED STATE
-# =====================
-chat_members = {}
-recent_chatters = {}
-scores = {}       # {chat_id: {user_id: {"name": str, "score": int}}}
-wallet = {}       # {user_id: {"name": str, "saldo": int}}
-user_badges = {}  # {user_id: str}  e.g. {123: "💖"}
+def is_admin(user_id: int) -> bool:
+    return user_id in ADMIN_IDS
 
-game_sessions = {}    # /angka (solo)   key: (chat_id, user_id)
-chaos_sessions = {}   # /angkachaos    key: chat_id
-duel_sessions = {}    # /angkaduel     key: chat_id
-duel_dm_pending = {}  # user_id -> chat_id
+async def setsaldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.message.from_user
+    if not is_admin(user.id):
+        await update.message.reply_text("⛔ kamu bukan admin bot.")
+        return
 
-spy_sessions = {}
-spy_guess_pending = {}
+    if not context.args or len(context.args) < 2:
+        await update.message.reply_text("gunakan: /setsaldo @username jumlah")
+        return
 
-MAX_RECENT = 300
+    username_part = context.args[0]
+    jumlah_str = context.args[1]
 
-# =====================
-# SLOT CONFIG
-# =====================
-SLOT_EMOJIS = ["🍎", "🍋", "🍊", "🍇", "⭐", "🎯", "🎰", "💎"]
-DIAMOND = "💎"
-SLOT_COST = 5_000
-SLOT_WIN_NORMAL = 500_000
-SLOT_WIN_DIAMOND = 1_000_000
-SLOT_INITIAL = 100_000
+    if not jumlah_str.lstrip("-").isdigit():
+        await update.message.reply_text("jumlah harus angka.")
+        return
 
-# =====================
-# SHOP CONFIG
-# =====================
-SHOP_ITEMS = {
-    "💖": 1_000_000,
-    "✨": 5_000_000,
-    "🪽": 10_000_000,
-    "💎": 20_000_000,
-}
+    jumlah = int(jumlah_str)
 
-# =====================
-# PERSISTENCE
-# =====================
-WALLET_FILE = os.path.join(os.path.dirname(__file__), "wallet_data.json")
-BADGES_FILE = os.path.join(os.path.dirname(__file__), "badges_data.json")
-
-def save_wallet():
-    try:
-        with open(WALLET_FILE, "w") as f:
-            json.dump({str(k): v for k, v in wallet.items()}, f)
-    except Exception:
-        pass
-
-def load_wallet():
-    if os.path.exists(WALLET_FILE):
-        try:
-            with open(WALLET_FILE) as f:
-                data = json.load(f)
-                for k, v in data.items():
-                    wallet[int(k)] = v
-        except Exception:
-            pass
-
-def save_badges():
-    try:
-        with open(BADGES_FILE, "w") as f:
-            json.dump({str(k): v for k, v in user_badges.items()}, f)
-    except Exception:
-        pass
-
-def load_badges():
-    if os.path.exists(BADGES_FILE):
-        try:
-            with open(BADGES_FILE) as f:
-                data = json.load(f)
-                for k, v in data.items():
-                    user_badges[int(k)] = v
-        except Exception:
-            pass
-
-load_wallet()
-load_badges()
-
-# =====================
-# HELPER FUNCTIONS
-# =====================
-
-def hitung_poin(jumlah_tebakan: int) -> int:
-    if jumlah_tebakan == 1:
-        return 100
-    elif jumlah_tebakan == 2:
-        return 90
-    elif jumlah_tebakan == 3:
-        return 80
-    elif jumlah_tebakan == 4:
-        return 70
-    elif jumlah_tebakan == 5:
-        return 60
-    elif jumlah_tebakan <= 8:
-        return 50
+    # Cari user berdasarkan username
+    target_user = None
+    if username_part.startswith("@"):
+        username = username_part[1:]
     else:
-        return 25
+        username = username_part
 
-def add_score(chat_id, user, points: int):
+    # Karena kita tidak bisa mendapatkan user objek langsung dari username tanpa update,
+    # kita coba dari data wallet yang ada, atau minta mention.
+    # Alternatif: bisa menggunakan fitur mention di pesan.
+    # Untuk kemudahan, kita minta user di-mention atau reply.
+    if update.message.reply_to_message:
+        target_user = update.message.reply_to_message.from_user
+    else:
+        # Coba cari di wallet berdasarkan username yang tersimpan
+        found_uid = None
+        for uid, data in wallet.items():
+            if data.get("name", "").startswith(f"@{username}"):
+                found_uid = uid
+                break
+        if found_uid:
+            # Buat dummy user object (tidak ideal, tapi cukup untuk ID)
+            class DummyUser:
+                def __init__(self, uid, name):
+                    self.id = uid
+                    self.username = None
+                    self.first_name = name
+            target_user = DummyUser(found_uid, wallet[found_uid]["name"])
+        else:
+            await update.message.reply_text("user tidak ditemukan. reply pesan user atau pastikan username sudah pernah main slot.")
+            return
+
+    uid = target_user.id
+    init_wallet(target_user)  # pastikan wallet ada
+    wallet[uid]["saldo"] = jumlah
+    wallet[uid]["name"] = get_nama(target_user)  # update nama
+    save_wallet()
+
+    await update.message.reply_text(
+        f"✅ saldo {get_nama(target_user)} diubah menjadi {format_rupiah(jumlah)}"
+    )
+
+async def addsaldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.message.from_user
+    if not is_admin(user.id):
+        await update.message.reply_text("⛔ kamu bukan admin bot.")
+        return
+
+    if not context.args or len(context.args) < 2:
+        await update.message.reply_text("gunakan: /addsaldo @username jumlah")
+        return
+
+    username_part = context.args[0]
+    jumlah_str = context.args[1]
+
+    if not jumlah_str.lstrip("-").isdigit():
+        await update.message.reply_text("jumlah harus angka.")
+        return
+
+    tambahan = int(jumlah_str)
+
+    target_user = None
+    if update.message.reply_to_message:
+        target_user = update.message.reply_to_message.from_user
+    else:
+        username = username_part.lstrip("@")
+        found_uid = None
+        for uid, data in wallet.items():
+            if data.get("name", "").startswith(f"@{username}"):
+                found_uid = uid
+                break
+        if found_uid:
+            class DummyUser:
+                def __init__(self, uid, name):
+                    self.id = uid
+                    self.username = None
+                    self.first_name = name
+            target_user = DummyUser(found_uid, wallet[found_uid]["name"])
+        else:
+            await update.message.reply_text("user tidak ditemukan.")
+            return
+
+    uid = target_user.id
+    init_wallet(target_user)
+    wallet[uid]["saldo"] += tambahan
+    wallet[uid]["name"] = get_nama(target_user)
+    save_wallet()
+
+    await update.message.reply_text(
+        f"✅ saldo {get_nama(target_user)} ditambah {format_rupiah(tambahan)}.\n"
+        f"saldo sekarang: {format_rupiah(wallet[uid]['saldo'])}"
+    )
+
+async def setscore(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.message.from_user
+    if not is_admin(user.id):
+        await update.message.reply_text("⛔ kamu bukan admin bot.")
+        return
+
+    if update.message.chat.type == "private":
+        await update.message.reply_text("command ini hanya untuk grup.")
+        return
+
+    if not context.args or len(context.args) < 2:
+        await update.message.reply_text("gunakan: /setscore @username jumlah")
+        return
+
+    username_part = context.args[0]
+    jumlah_str = context.args[1]
+
+    if not jumlah_str.lstrip("-").isdigit():
+        await update.message.reply_text("jumlah harus angka.")
+        return
+
+    jumlah = int(jumlah_str)
+
+    chat_id = update.message.chat_id
+
+    target_user = None
+    if update.message.reply_to_message:
+        target_user = update.message.reply_to_message.from_user
+    else:
+        username = username_part.lstrip("@")
+        # Cari di scores[chat_id]
+        found_uid = None
+        if chat_id in scores:
+            for uid, info in scores[chat_id].items():
+                if info.get("name", "").startswith(f"@{username}"):
+                    found_uid = uid
+                    break
+        if found_uid:
+            class DummyUser:
+                def __init__(self, uid, name):
+                    self.id = uid
+                    self.username = None
+                    self.first_name = name
+            target_user = DummyUser(found_uid, scores[chat_id][found_uid]["name"])
+        else:
+            await update.message.reply_text("user tidak ditemukan di papan skor grup ini.")
+            return
+
+    uid = target_user.id
     if chat_id not in scores:
         scores[chat_id] = {}
-    uid = user.id
-    name = get_nama(user)
     if uid not in scores[chat_id]:
-        scores[chat_id][uid] = {"name": name, "score": 0}
-    scores[chat_id][uid]["score"] += points
-    scores[chat_id][uid]["name"] = name
+        scores[chat_id][uid] = {"name": get_nama(target_user), "score": 0}
+    scores[chat_id][uid]["score"] = jumlah
+    scores[chat_id][uid]["name"] = get_nama(target_user)
+    save_scores()
 
-def get_nama(user) -> str:
-    base = f"@{user.username}" if user.username else user.first_name
-    badge = user_badges.get(user.id, "")
-    return f"{base} {badge}" if badge else base
+    await update.message.reply_text(
+        f"✅ skor {get_nama(target_user)} di grup ini diubah menjadi {jumlah} poin."
+    )
 
-def format_rupiah(jumlah: int) -> str:
-    neg = jumlah < 0
-    s = f"{abs(jumlah):,}".replace(",", ".")
-    return f"-Rp {s},-" if neg else f"Rp {s},-"
+async def addscore(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.message.from_user
+    if not is_admin(user.id):
+        await update.message.reply_text("⛔ kamu bukan admin bot.")
+        return
 
-def get_saldo(user_id: int) -> int:
-    return wallet.get(user_id, {}).get("saldo", SLOT_INITIAL)
+    if update.message.chat.type == "private":
+        await update.message.reply_text("command ini hanya untuk grup.")
+        return
 
-def init_wallet(user):
-    uid = user.id
-    if uid not in wallet:
-        wallet[uid] = {
-            "name": get_nama(user),
-            "saldo": SLOT_INITIAL
-        }
+    if not context.args or len(context.args) < 2:
+        await update.message.reply_text("gunakan: /addscore @username jumlah")
+        return
+
+    username_part = context.args[0]
+    jumlah_str = context.args[1]
+
+    if not jumlah_str.lstrip("-").isdigit():
+        await update.message.reply_text("jumlah harus angka.")
+        return
+
+    tambahan = int(jumlah_str)
+
+    chat_id = update.message.chat_id
+
+    target_user = None
+    if update.message.reply_to_message:
+        target_user = update.message.reply_to_message.from_user
     else:
-        wallet[uid]["name"] = get_nama(user)
-
-async def send_sticker(chat_id_or_update, sticker_id, context, is_reply=False):
-    try:
-        if is_reply and hasattr(chat_id_or_update, "message"):
-            await chat_id_or_update.message.reply_sticker(sticker_id)
+        username = username_part.lstrip("@")
+        found_uid = None
+        if chat_id in scores:
+            for uid, info in scores[chat_id].items():
+                if info.get("name", "").startswith(f"@{username}"):
+                    found_uid = uid
+                    break
+        if found_uid:
+            class DummyUser:
+                def __init__(self, uid, name):
+                    self.id = uid
+                    self.username = None
+                    self.first_name = name
+            target_user = DummyUser(found_uid, scores[chat_id][found_uid]["name"])
         else:
-            await context.bot.send_sticker(chat_id=chat_id_or_update, sticker=sticker_id)
-    except Exception:
-        pass
+            await update.message.reply_text("user tidak ditemukan di papan skor grup ini.")
+            return
+
+    uid = target_user.id
+    if chat_id not in scores:
+        scores[chat_id] = {}
+    if uid not in scores[chat_id]:
+        scores[chat_id][uid] = {"name": get_nama(target_user), "score": 0}
+    scores[chat_id][uid]["score"] += tambahan
+    scores[chat_id][uid]["name"] = get_nama(target_user)
+    save_scores()
+
+    await update.message.reply_text(
+        f"✅ skor {get_nama(target_user)} ditambah {tambahan} poin.\n"
+        f"skor sekarang: {scores[chat_id][uid]['score']}"
+    )
