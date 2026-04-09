@@ -5,11 +5,13 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from data import (
-    chat_members, recent_chatters, scores, wallet,
-    MAX_RECENT, get_nama, format_rupiah,
+    chat_members, recent_chatters,
+    MAX_RECENT, get_nama, format_rupiah, get_raw_name,
     game_sessions, chaos_sessions, duel_sessions, duel_dm_pending,
-    spy_guess_pending
+    spy_guess_pending,
+    get_scores_dict
 )
+from db import db_get_badges
 
 jawaban = [
     "iyah", "g", "gak", "mungkin", "pasti", "100%", "impossible", "tidak akan",
@@ -150,7 +152,7 @@ async def tag7(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def skor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
-    data = scores.get(chat_id, {})
+    data = await get_scores_dict(chat_id)
 
     if not data:
         await update.message.reply_text("belum ada yang main atau belum ada yang menang")
@@ -159,11 +161,8 @@ async def skor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sorted_scores = sorted(data.items(), key=lambda x: x[1]["score"], reverse=True)
     text = "🏆 <b>PAPAN SKOR GRUP</b>\n\n"
     for i, (uid, info) in enumerate(sorted_scores, 1):
-        # Ambil nama dengan badge dari data user (jika ada)
-        from data import user_badges
-        # Cari username asli dari info["name"] (yang disimpan adalah raw name)
+        badges = await db_get_badges(uid)
         raw_name = info["name"]
-        badges = user_badges.get(uid, [])
         display_name = f"{raw_name} {''.join(badges)}" if badges else raw_name
         text += f"{i}. {display_name} — {info['score']} poin\n"
 
