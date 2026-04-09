@@ -1,9 +1,10 @@
 import os
 from telegram import Update
 from telegram.ext import ContextTypes
-from data import wallet, scores, save_wallet, save_scores, get_nama, format_rupiah, init_wallet
+from data import get_nama, format_rupiah, init_wallet, get_raw_name
+from db import db_set_wallet, db_get_scores, db_set_score, db_get_wallet_by_name
 
-# Ambil ID admin dari environment variable, pisahkan dengan koma
+# Ambil ID admin dari environment variable
 ADMIN_IDS_STR = os.environ.get("BOT_ADMIN_IDS", "")
 ADMIN_IDS = set()
 for part in ADMIN_IDS_STR.split(","):
@@ -33,46 +34,31 @@ async def setsaldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     jumlah = int(jumlah_str)
 
-    # Cari user berdasarkan username
     target_user = None
-    if username_part.startswith("@"):
-        username = username_part[1:]
-    else:
-        username = username_part
-
-    # Karena kita tidak bisa mendapatkan user objek langsung dari username tanpa update,
-    # kita coba dari data wallet yang ada, atau minta mention.
-    # Alternatif: bisa menggunakan fitur mention di pesan.
-    # Untuk kemudahan, kita minta user di-mention atau reply.
     if update.message.reply_to_message:
         target_user = update.message.reply_to_message.from_user
     else:
-        # Coba cari di wallet berdasarkan username yang tersimpan
+        username = username_part.lstrip("@")
         found_uid = None
-        for uid, data in wallet.items():
-            if data.get("name", "").startswith(f"@{username}"):
-                found_uid = uid
-                break
-        if found_uid:
-            # Buat dummy user object (tidak ideal, tapi cukup untuk ID)
+        placeholder = await db_get_wallet_by_name(f"@{username}")
+        if placeholder:
+            found_uid = 0
             class DummyUser:
                 def __init__(self, uid, name):
                     self.id = uid
                     self.username = None
                     self.first_name = name
-            target_user = DummyUser(found_uid, wallet[found_uid]["name"])
+            target_user = DummyUser(0, placeholder["name"])
         else:
             await update.message.reply_text("user tidak ditemukan. reply pesan user atau pastikan username sudah pernah main slot.")
             return
 
     uid = target_user.id
-    init_wallet(target_user)  # pastikan wallet ada
-    wallet[uid]["saldo"] = jumlah
-    wallet[uid]["name"] = get_nama(target_user)  # update nama
-    save_wallet()
+    await init_wallet(target_user)
+    await db_set_wallet(uid, get_raw_name(target_user), jumlah)
 
     await update.message.reply_text(
-        f"✅ saldo {get_nama(target_user)} diubah menjadi {format_rupiah(jumlah)}"
+        f"✅ saldo {await get_nama(target_user)} diubah menjadi {format_rupiah(jumlah)}"
     )
 
 async def addsaldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -99,31 +85,29 @@ async def addsaldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         target_user = update.message.reply_to_message.from_user
     else:
         username = username_part.lstrip("@")
-        found_uid = None
-        for uid, data in wallet.items():
-            if data.get("name", "").startswith(f"@{username}"):
-                found_uid = uid
-                break
-        if found_uid:
+        placeholder = await db_get_wallet_by_name(f"@{username}")
+        if placeholder:
             class DummyUser:
                 def __init__(self, uid, name):
                     self.id = uid
                     self.username = None
                     self.first_name = name
-            target_user = DummyUser(found_uid, wallet[found_uid]["name"])
+            target_user = DummyUser(0, placeholder["name"])
         else:
             await update.message.reply_text("user tidak ditemukan.")
             return
 
     uid = target_user.id
-    init_wallet(target_user)
-    wallet[uid]["saldo"] += tambahan
-    wallet[uid]["name"] = get_nama(target_user)
-    save_wallet()
+    await init_wallet(target_user)
+    from db import db_get_wallet
+    data = await db_get_wallet(uid)
+    saldo = data["saldo"] if data else 0
+    saldo += tambahan
+    await db_set_wallet(uid, get_raw_name(target_user), saldo)
 
     await update.message.reply_text(
-        f"✅ saldo {get_nama(target_user)} ditambah {format_rupiah(tambahan)}.\n"
-        f"saldo sekarang: {format_rupiah(wallet[uid]['saldo'])}"
+        f"✅ saldo {await get_nama(target_user)} ditambah {format_rupiah(tambahan)}.\n"
+        f"saldo sekarang: {format_rupiah(saldo)}"
     )
 
 async def setscore(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -156,35 +140,28 @@ async def setscore(update: Update, context: ContextTypes.DEFAULT_TYPE):
         target_user = update.message.reply_to_message.from_user
     else:
         username = username_part.lstrip("@")
-        # Cari di scores[chat_id]
+        scores_dict = await db_get_scores(chat_id)
         found_uid = None
-        if chat_id in scores:
-            for uid, info in scores[chat_id].items():
-                if info.get("name", "").startswith(f"@{username}"):
-                    found_uid = uid
-                    break
+        for uid, info in scores_dict.items():
+            if info["name"].startswith(f"@{username}"):
+                found_uid = uid
+                break
         if found_uid:
             class DummyUser:
                 def __init__(self, uid, name):
                     self.id = uid
                     self.username = None
                     self.first_name = name
-            target_user = DummyUser(found_uid, scores[chat_id][found_uid]["name"])
+            target_user = DummyUser(found_uid, scores_dict[found_uid]["name"])
         else:
             await update.message.reply_text("user tidak ditemukan di papan skor grup ini.")
             return
 
     uid = target_user.id
-    if chat_id not in scores:
-        scores[chat_id] = {}
-    if uid not in scores[chat_id]:
-        scores[chat_id][uid] = {"name": get_nama(target_user), "score": 0}
-    scores[chat_id][uid]["score"] = jumlah
-    scores[chat_id][uid]["name"] = get_nama(target_user)
-    save_scores()
+    await db_set_score(chat_id, uid, get_raw_name(target_user), jumlah)
 
     await update.message.reply_text(
-        f"✅ skor {get_nama(target_user)} di grup ini diubah menjadi {jumlah} poin."
+        f"✅ skor {await get_nama(target_user)} di grup ini diubah menjadi {jumlah} poin."
     )
 
 async def addscore(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -217,33 +194,29 @@ async def addscore(update: Update, context: ContextTypes.DEFAULT_TYPE):
         target_user = update.message.reply_to_message.from_user
     else:
         username = username_part.lstrip("@")
+        scores_dict = await db_get_scores(chat_id)
         found_uid = None
-        if chat_id in scores:
-            for uid, info in scores[chat_id].items():
-                if info.get("name", "").startswith(f"@{username}"):
-                    found_uid = uid
-                    break
+        for uid, info in scores_dict.items():
+            if info["name"].startswith(f"@{username}"):
+                found_uid = uid
+                break
         if found_uid:
             class DummyUser:
                 def __init__(self, uid, name):
                     self.id = uid
                     self.username = None
                     self.first_name = name
-            target_user = DummyUser(found_uid, scores[chat_id][found_uid]["name"])
+            target_user = DummyUser(found_uid, scores_dict[found_uid]["name"])
         else:
             await update.message.reply_text("user tidak ditemukan di papan skor grup ini.")
             return
 
     uid = target_user.id
-    if chat_id not in scores:
-        scores[chat_id] = {}
-    if uid not in scores[chat_id]:
-        scores[chat_id][uid] = {"name": get_nama(target_user), "score": 0}
-    scores[chat_id][uid]["score"] += tambahan
-    scores[chat_id][uid]["name"] = get_nama(target_user)
-    save_scores()
+    current = (await db_get_scores(chat_id)).get(uid, {}).get("score", 0)
+    new_score = current + tambahan
+    await db_set_score(chat_id, uid, get_raw_name(target_user), new_score)
 
     await update.message.reply_text(
-        f"✅ skor {get_nama(target_user)} ditambah {tambahan} poin.\n"
-        f"skor sekarang: {scores[chat_id][uid]['score']}"
+        f"✅ skor {await get_nama(target_user)} ditambah {tambahan} poin.\n"
+        f"skor sekarang: {new_score}"
     )
