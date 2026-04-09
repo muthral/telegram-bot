@@ -1,18 +1,17 @@
 from telegram import Update
 from telegram.ext import ContextTypes
-
 from data import (
-    wallet, user_badges, SHOP_ITEMS, EXCHANGE_RATES, MAX_BADGES, scores,
+    SHOP_ITEMS, EXCHANGE_RATES, MAX_BADGES,
     init_wallet, format_rupiah, get_nama, get_raw_name,
-    save_wallet, save_badges, save_scores
+    db_get_wallet, db_set_wallet, db_get_badges, db_set_badges,
+    db_get_scores, db_set_score
 )
 
-# Dictionary untuk menyimpan konfirmasi penggantian badge tertua
-pending_badge_replace = {}  # user_id -> emoji_baru
+pending_badge_replace = {}
 
 async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.message.from_user.id
-    badge_list = user_badges.get(uid, [])
+    badge_list = await db_get_badges(uid)
     badge_str = "".join(badge_list) if badge_list else "belum punya"
 
     text = (
@@ -38,7 +37,6 @@ async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"💰 <b>TUKAR SKOR → SALDO</b>\n\n"
     )
 
-    # Tambahkan info penukaran
     sorted_rates = sorted(EXCHANGE_RATES.items())
     for skor, rupiah in sorted_rates:
         text += f"  {skor} poin  →  {format_rupiah(rupiah)}\n"
@@ -54,7 +52,7 @@ async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def beli(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     uid = user.id
-    nama = get_nama(user)
+    nama = await get_nama(user)
 
     if not context.args:
         await update.message.reply_text(
@@ -67,7 +65,6 @@ async def beli(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     target_badge = context.args[0].strip()
-
     if target_badge not in SHOP_ITEMS:
         tersedia = "  ".join(SHOP_ITEMS.keys())
         await update.message.reply_text(
@@ -79,9 +76,9 @@ async def beli(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     harga = SHOP_ITEMS[target_badge]
-
-    init_wallet(user)
-    saldo = wallet[uid]["saldo"]
+    await init_wallet(user)
+    wallet_data = await db_get_wallet(uid)
+    saldo = wallet_data["saldo"] if wallet_data else 0
 
     if saldo < harga:
         kurang = harga - saldo
@@ -95,35 +92,27 @@ async def beli(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Ambil badge list saat ini
-    current_badges = user_badges.get(uid, [])
+    current_badges = await db_get_badges(uid)
 
-    # Cek apakah sudah penuh dan perlu konfirmasi
     if len(current_badges) >= MAX_BADGES:
-        # Cek apakah user sudah dalam mode konfirmasi untuk badge yang sama
         pending = pending_badge_replace.get(uid)
         if pending == target_badge:
-            # User sudah konfirmasi, lakukan penggantian
-            replaced = current_badges.pop(0)  # hapus badge pertama (tertua)
+            replaced = current_badges.pop(0)
             current_badges.append(target_badge)
-            user_badges[uid] = current_badges
-            wallet[uid]["saldo"] -= harga
-            save_wallet()
-            save_badges()
-
-            # Hapus dari pending
+            await db_set_badges(uid, current_badges)
+            saldo -= harga
+            await db_set_wallet(uid, get_raw_name(user), saldo)
             del pending_badge_replace[uid]
 
             await update.message.reply_text(
                 f"✅ <b>BADGE DITAMBAHKAN!</b>\n\n"
                 f"{nama}, badge <b>{target_badge}</b> berhasil dibeli.\n"
                 f"Karena sudah mencapai batas {MAX_BADGES} badge, badge pertama (<b>{replaced}</b>) dihapus.\n\n"
-                f"💳 saldo tersisa: <b>{format_rupiah(wallet[uid]['saldo'])}</b>\n"
+                f"💳 saldo tersisa: <b>{format_rupiah(saldo)}</b>\n"
                 f"🏷 badge-mu sekarang: <b>{''.join(current_badges)}</b>",
                 parse_mode="HTML"
             )
         else:
-            # Minta konfirmasi
             pending_badge_replace[uid] = target_badge
             await update.message.reply_text(
                 f"⚠️ <b>BADGE SUDAH PENUH!</b> ({MAX_BADGES} buah)\n\n"
@@ -133,26 +122,21 @@ async def beli(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
     else:
-        # Belum penuh, langsung tambahkan
         current_badges.append(target_badge)
-        user_badges[uid] = current_badges
-        wallet[uid]["saldo"] -= harga
-        save_wallet()
-        save_badges()
-
-        # Bersihkan pending jika ada
+        await db_set_badges(uid, current_badges)
+        saldo -= harga
+        await db_set_wallet(uid, get_raw_name(user), saldo)
         pending_badge_replace.pop(uid, None)
 
         await update.message.reply_text(
             f"🎉 <b>BADGE DIBELI!</b> 🎉\n\n"
             f"selamat {nama}! badge <b>{target_badge}</b> sudah ditambahkan.\n\n"
-            f"💳 saldo tersisa: <b>{format_rupiah(wallet[uid]['saldo'])}</b>\n"
+            f"💳 saldo tersisa: <b>{format_rupiah(saldo)}</b>\n"
             f"🏷 badge-mu sekarang: <b>{''.join(current_badges)}</b>",
             parse_mode="HTML"
         )
 
 async def tukar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Menukar skor menjadi saldo."""
     user = update.message.from_user
     chat_id = update.message.chat_id
 
@@ -184,17 +168,12 @@ async def tukar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Cek skor user di grup ini
-    if chat_id not in scores:
+    scores_dict = await db_get_scores(chat_id)
+    if user.id not in scores_dict:
         await update.message.reply_text("Kamu belum memiliki skor di grup ini.")
         return
 
-    user_score_data = scores[chat_id].get(user.id)
-    if not user_score_data:
-        await update.message.reply_text("Kamu belum memiliki skor di grup ini.")
-        return
-
-    current_score = user_score_data["score"]
+    current_score = scores_dict[user.id]["score"]
     if current_score < skor_ditukar:
         await update.message.reply_text(
             f"❌ Skor kamu tidak cukup.\n"
@@ -206,22 +185,21 @@ async def tukar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     rupiah_didapat = EXCHANGE_RATES[skor_ditukar]
 
     # Kurangi skor
-    user_score_data["score"] -= skor_ditukar
-    # Update nama (jika ada perubahan nama dasar)
-    user_score_data["name"] = get_raw_name(user)
-    save_scores()
+    new_score = current_score - skor_ditukar
+    await db_set_score(chat_id, user.id, get_raw_name(user), new_score)
 
     # Tambah saldo
-    init_wallet(user)
-    wallet[user.id]["saldo"] += rupiah_didapat
-    wallet[user.id]["name"] = get_raw_name(user)
-    save_wallet()
+    await init_wallet(user)
+    wallet_data = await db_get_wallet(user.id)
+    saldo = wallet_data["saldo"] if wallet_data else SLOT_INITIAL
+    saldo += rupiah_didapat
+    await db_set_wallet(user.id, get_raw_name(user), saldo)
 
     await update.message.reply_text(
         f"✅ <b>PENUKARAN BERHASIL!</b>\n\n"
-        f"{get_nama(user)} menukar <b>{skor_ditukar} poin</b>\n"
+        f"{await get_nama(user)} menukar <b>{skor_ditukar} poin</b>\n"
         f"menjadi <b>{format_rupiah(rupiah_didapat)}</b> saldo.\n\n"
-        f"💰 saldo sekarang: <b>{format_rupiah(wallet[user.id]['saldo'])}</b>\n"
-        f"🏅 sisa skor: <b>{user_score_data['score']}</b>",
+        f"💰 saldo sekarang: <b>{format_rupiah(saldo)}</b>\n"
+        f"🏅 sisa skor: <b>{new_score}</b>",
         parse_mode="HTML"
     )
