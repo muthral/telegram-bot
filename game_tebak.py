@@ -4,7 +4,7 @@ from telegram.ext import ContextTypes
 
 from data import (
     game_sessions, chaos_sessions, duel_sessions, duel_dm_pending,
-    add_score, hitung_poin, get_nama
+    add_score, hitung_poin, get_nama, get_raw_name
 )
 
 # =====================
@@ -69,7 +69,7 @@ async def proses_tebakan_internal(update: Update, context: ContextTypes.DEFAULT_
     jumlah = session["tebakan"]
     poin = hitung_poin(jumlah)
     del game_sessions[key]
-    add_score(chat_id, update.message.from_user, poin)
+    await add_score(chat_id, update.message.from_user, poin)
 
     if jumlah == 1:
         pesan = "🤯🤯🤯 OMAIGOT?! SEKALI TEBAK LANGSUNG BENER!!"
@@ -140,7 +140,7 @@ async def proses_chaos_guess(update: Update, context: ContextTypes.DEFAULT_TYPE)
     target = session["angka"]
     user = update.message.from_user
     uid = user.id
-    nama = get_nama(user)
+    nama = await get_nama(user)
 
     session["tebakan_per_user"][uid] = session["tebakan_per_user"].get(uid, 0) + 1
 
@@ -154,7 +154,7 @@ async def proses_chaos_guess(update: Update, context: ContextTypes.DEFAULT_TYPE)
     jumlah = session["tebakan_per_user"][uid]
     poin = hitung_poin(jumlah)
     del chaos_sessions[chat_id]
-    add_score(chat_id, user, poin)
+    await add_score(chat_id, user, poin)
 
     await update.message.reply_text(
         f"🎉 <b>{nama}</b> berhasil menebak angka <b>{target}</b>!\n\n"
@@ -218,7 +218,7 @@ async def joinduel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session["player_objs"][user.id] = user
     session["tebakan_per_player"][user.id] = 0
 
-    nama = get_nama(user)
+    nama = await get_nama(user)
     jumlah = len(session["players"])
 
     if jumlah == 1:
@@ -251,8 +251,8 @@ async def startduel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     player_a = session["player_objs"][session["players"][0]]
     player_b = session["player_objs"][session["players"][1]]
-    nama_a = get_nama(player_a)
-    nama_b = get_nama(player_b)
+    nama_a = await get_nama(player_a)
+    nama_b = await get_nama(player_b)
 
     await update.message.reply_text(
         f"⚔️ <b>DUEL DIMULAI!</b>\n\n"
@@ -265,7 +265,7 @@ async def startduel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     for uid in session["players"]:
         user_obj = session["player_objs"][uid]
-        nama = get_nama(user_obj)
+        nama = await get_nama(user_obj)
         try:
             await context.bot.send_message(
                 uid,
@@ -281,7 +281,7 @@ async def startduel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             await context.bot.send_message(
                 chat_id,
-                f"⚠️ bot tidak bisa DM {get_nama(user_obj)}!\n"
+                f"⚠️ bot tidak bisa DM {nama}!\n"
                 f"pastikan kamu sudah pernah chat dengan bot dulu ya."
             )
 
@@ -333,8 +333,8 @@ async def proses_duel_dm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(session["numbers_received"]) == 2:
         player_a_id = session["players"][0]
         player_b_id = session["players"][1]
-        nama_a = get_nama(session["player_objs"][player_a_id])
-        nama_b = get_nama(session["player_objs"][player_b_id])
+        nama_a = await get_nama(session["player_objs"][player_a_id])
+        nama_b = await get_nama(session["player_objs"][player_b_id])
 
         await context.bot.send_message(
             chat_id,
@@ -377,8 +377,8 @@ async def proses_duel_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tebakan = int(text.strip())
     lawan_id = players[(session["turn"] + 1) % 2]
     target = session["numbers"][lawan_id]
-    nama = get_nama(user)
-    nama_lawan = get_nama(session["player_objs"][lawan_id])
+    nama = await get_nama(user)
+    nama_lawan = await get_nama(session["player_objs"][lawan_id])
 
     session["tebakan_per_player"][user_id] = session["tebakan_per_player"].get(user_id, 0) + 1
 
@@ -389,7 +389,7 @@ async def proses_duel_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         jumlah_tebak = session["tebakan_per_player"][user_id]
         del duel_sessions[chat_id]
-        add_score(chat_id, user, 60)
+        await add_score(chat_id, user, 60)
 
         await update.message.reply_text(
             f"🏆 <b>{nama} MENANG DUEL!</b>\n\n"
@@ -403,7 +403,7 @@ async def proses_duel_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session["turn"] += 1
     next_id = players[session["turn"] % 2]
     next_player = session["player_objs"][next_id]
-    next_nama = get_nama(next_player)
+    next_nama = await get_nama(next_player)
 
     await context.bot.send_message(
         chat_id,
