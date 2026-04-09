@@ -50,7 +50,8 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/kekayaan — lihat saldo & kekayaan semua pemain\n\n"
         "🏪 <b>TOKO BADGE</b>\n"
         "/shop — lihat daftar badge & harga\n"
-        "/beli [emoji] — beli badge untuk username-mu\n\n"
+        "/beli [emoji] — beli badge untuk username-mu\n"
+        "/tukar [jumlah] — tukar skor menjadi saldo\n\n"
         "🎮 <b>GAME SPY</b>\n"
         "/spy\n"
         "/join\n"
@@ -158,7 +159,13 @@ async def skor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sorted_scores = sorted(data.items(), key=lambda x: x[1]["score"], reverse=True)
     text = "🏆 <b>PAPAN SKOR GRUP</b>\n\n"
     for i, (uid, info) in enumerate(sorted_scores, 1):
-        text += f"{i}. {info['name']} — {info['score']} poin\n"
+        # Ambil nama dengan badge dari data user (jika ada)
+        from data import user_badges
+        # Cari username asli dari info["name"] (yang disimpan adalah raw name)
+        raw_name = info["name"]
+        badges = user_badges.get(uid, [])
+        display_name = f"{raw_name} {''.join(badges)}" if badges else raw_name
+        text += f"{i}. {display_name} — {info['score']} poin\n"
 
     await update.message.reply_text(text, parse_mode="HTML")
 
